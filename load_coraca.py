@@ -2,6 +2,8 @@ import torch
 import hypernetx as hnx
 import dhg
 
+from train_utils import get_train_val_test_mask
+
 
 def get_hgraph_from_edgelist(num_nodes: int, num_edges: int, edge_list, add_self_edges: bool = True) -> hnx.Hypergraph:
     """
@@ -39,22 +41,15 @@ def incidence_matrix_to_edge_index(H):
 
 
 
-def get_train_val_test_mask(n, split=[0.5, 0.25, 0.25], seed=42):
+def incidence_matrix_to_incidence_dict(H):
 
-    split_rand_generator = torch.Generator().manual_seed(seed)
-    node_index = range(n)
-    train_inds, val_inds, test_inds = torch.utils.data.random_split(node_index, split, generator=split_rand_generator)
+    _, num_edges = H.shape
 
-    train_mask = torch.zeros(n, dtype=bool)
-    train_mask[train_inds] = True
-
-    val_mask = torch.zeros(n, dtype=bool)
-    val_mask[val_inds] = True
-
-    test_mask = torch.zeros(n, dtype=bool)
-    test_mask[test_inds] = True
-
-    return train_mask, val_mask, test_mask
+    incidence_dict = {}
+    for edge in range(num_edges):
+        inds = torch.where(H[:,edge] == 1)[0]
+        incidence_dict[f"e{edge:04}"] = inds.tolist()
+    return incidence_dict
 
 
 
@@ -64,7 +59,7 @@ def get_train_val_test_mask_standardsplit():
 
 
 
-def get_coraca_hypergraph() -> hnx.Hypergraph:
+def get_coraca_hypergraph(split=[0.5, 0.25, 0.25], split_seed=3) -> hnx.Hypergraph:
 
     coraca_dhg = dhg.data.CoauthorshipCora(data_root='data')
     hgraph_coraca = get_hgraph_from_edgelist(coraca_dhg['num_vertices'], coraca_dhg['num_edges'], coraca_dhg['edge_list'])
@@ -73,7 +68,7 @@ def get_coraca_hypergraph() -> hnx.Hypergraph:
     hgraph_coraca.y = coraca_dhg['labels']
 
     # do not use the dhg's split for this dataset
-    train_mask, val_mask, test_mask = get_train_val_test_mask(n=coraca_dhg['num_vertices'])
+    train_mask, val_mask, test_mask = get_train_val_test_mask(n=coraca_dhg['num_vertices'], split=split, seed=split_seed)
     hgraph_coraca.train_mask = train_mask
     hgraph_coraca.val_mask = val_mask
     hgraph_coraca.test_mask = test_mask

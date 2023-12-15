@@ -1,5 +1,30 @@
+import pickle
+import os
+from datetime import datetime
+from tqdm import tqdm
+
 import torch
 from models.graph_models import GCN
+
+
+
+def get_train_val_test_mask(n, split, seed):
+
+    split_rand_generator = torch.Generator().manual_seed(seed)
+    node_index = range(n)
+    train_inds, val_inds, test_inds = torch.utils.data.random_split(node_index, split, generator=split_rand_generator)
+
+    train_mask = torch.zeros(n, dtype=bool)
+    train_mask[train_inds] = True
+
+    val_mask = torch.zeros(n, dtype=bool)
+    val_mask[val_inds] = True
+
+    test_mask = torch.zeros(n, dtype=bool)
+    test_mask[test_inds] = True
+
+    return train_mask, val_mask, test_mask
+
 
 
 def update_stats(training_stats, epoch_stats):
@@ -56,6 +81,8 @@ def train(graph, model, mask, optimiser):
     loss = torch.nn.functional.cross_entropy(logits, y)
     loss.backward()
     optimiser.step()
+    del logits
+    torch.cuda.empty_cache()
     return loss.item()
 
 
@@ -68,6 +95,7 @@ def eval(graph, model, mask):
     Return:
         acc
     """
+    if sum(mask).item() == 0: return torch.nan
     model.eval()
     y = graph.y[mask]
     with torch.no_grad():
@@ -76,31 +104,70 @@ def eval(graph, model, mask):
         else:
             logits = model(graph)[mask]
         acc = get_accuracy(logits, y)
+    del logits
+    torch.cuda.empty_cache()
     return acc
 
 
 
-def train_eval_loop(model, hgraph, train_mask, val_mask, test_mask, lr, num_epochs, printevery=10):
+def train_eval_loop(model, hgraph, train_mask, val_mask, test_mask, lr, num_epochs, printevery=10, verbose=True):
     
     optimiser = torch.optim.Adam(model.parameters(), lr=lr)
     train_stats = None
 
-    for epoch in range(num_epochs):
-        
+    train_acc = eval(hgraph, model, train_mask)
+    val_acc = eval(hgraph, model, val_mask)
+    test_acc = eval(hgraph, model, test_mask)
+    epoch_stats = {'train_acc': train_acc, 'val_acc': val_acc, 'test_acc': test_acc, 'epoch': 0, 'train_loss': torch.nan}
+    train_stats = update_stats(train_stats, epoch_stats)
+
+    for epoch in range(1,num_epochs+1): # 1-index the epochs
         train_loss = train(hgraph, model, train_mask, optimiser)
         train_acc = eval(hgraph, model, train_mask)
         val_acc = eval(hgraph, model, val_mask)
+        test_acc = eval(hgraph, model, test_mask)
         
-        if epoch % printevery == 0:
+        if verbose and epoch % printevery == 0:
             print(f"Epoch {epoch} with train loss: {train_loss:.3f} train acc: {train_acc:.3f} val acc: {val_acc:.3f}")
         
-        epoch_stats = {'train_acc': train_acc, 'val_acc': val_acc, 'epoch': epoch}
+        epoch_stats = {'train_acc': train_acc, 'val_acc': val_acc, 'test_acc': test_acc, 'epoch': epoch, 'train_loss': train_loss}
         train_stats = update_stats(train_stats, epoch_stats)
 
-    test_acc = eval(hgraph, model, test_mask)
-    print(f"Final test acc: {test_acc:.3f}")
+    if verbose:
+        print(f"Final train acc: {train_acc:.3f} | val acc: {val_acc:.3f} | test acc: {test_acc:.3f} ")
 
     return train_stats
+
+
+
+def train_eval_loop_many(
+        nruns: int, 
+        model_class,
+        model_args,
+        hgraph, 
+        train_mask, val_mask, test_mask, 
+        lr, num_epochs, 
+        printevery=10, verbose=False,
+        save_dir=None, save_name=None,
+        device=None,
+        ):        
+
+    train_stats_all = {}
+
+    for nrun in tqdm(range(nruns)):
+
+        model = model_class(**model_args)
+        model.to(device)
+        
+        train_stats_all[nrun] = train_eval_loop(model, hgraph, train_mask, val_mask, test_mask, lr, num_epochs, printevery, verbose)
+    
+    if save_dir is not None:
+        if save_name is None:
+            save_name = f"train_stats_{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
+        with open(os.path.join(save_dir, save_name), 'wb') as f:
+            pickle.dump(train_stats_all, f)
+
+    return train_stats_all
 
 
 
