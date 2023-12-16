@@ -1,0 +1,5 @@
+name: quick
+lr: 0.01
+num_epochs: 80
+printevery: 10
+verbose: True

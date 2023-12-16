@@ -1,0 +1,9 @@
+defaults:
+  - _self_
+  - hgraph: random_house
+  - model: gcn
+  - train: base
+
+save_dir: train_results/random_house
+save_name: untitled
+save_datestamp: False

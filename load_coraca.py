@@ -2,7 +2,9 @@ import torch
 import hypernetx as hnx
 import dhg
 
+from hgraph import incidence_matrix_to_edge_index
 from train_utils import get_train_val_test_mask
+
 
 
 def get_hgraph_from_edgelist(num_nodes: int, num_edges: int, edge_list, add_self_edges: bool = True) -> hnx.Hypergraph:
@@ -29,27 +31,6 @@ def get_hgraph_from_edgelist(num_nodes: int, num_edges: int, edge_list, add_self
     hgraph = hnx.Hypergraph(edge_dict)
 
     return hgraph
-
-
-
-def incidence_matrix_to_edge_index(H):
-
-    nodes, edges = torch.where(H > 0)
-    edge_index = torch.vstack((nodes, edges))
-
-    return edge_index
-
-
-
-def incidence_matrix_to_incidence_dict(H):
-
-    _, num_edges = H.shape
-
-    incidence_dict = {}
-    for edge in range(num_edges):
-        inds = torch.where(H[:,edge] == 1)[0]
-        incidence_dict[f"e{edge:04}"] = inds.tolist()
-    return incidence_dict
 
 
 

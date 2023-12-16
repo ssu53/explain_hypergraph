@@ -1,0 +1,6 @@
+name: gcn_resid
+model: HyperResidGCN
+
+defaults:
+- _self_
+- model_params: gcn_resid

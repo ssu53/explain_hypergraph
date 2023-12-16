@@ -41,7 +41,6 @@ def generate_random_hypergraph(num_nodes, num_edges):
     
     graph = gnmk_random_graph(num_edges, num_nodes, 3*num_edges)
     hgraph = hnx.Hypergraph.from_bipartite(graph) # first bipartite part are edges, second part are nodes
-    print(hgraph.shape)
 
     # reindex the nodes and edges from 0
     H = hgraph.incidence_matrix().toarray()
@@ -49,6 +48,5 @@ def generate_random_hypergraph(num_nodes, num_edges):
     node_names = range(num_nodes)
     edge_names = [f"e{edge:04}" for edge in range(num_edges)]
     hgraph = hnx.Hypergraph.from_incidence_matrix(H, node_names, edge_names)
-    print(hgraph.shape)
 
     return hgraph

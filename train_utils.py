@@ -148,7 +148,6 @@ def train_eval_loop_many(
         train_mask, val_mask, test_mask, 
         lr, num_epochs, 
         printevery=10, verbose=False,
-        save_dir=None, save_name=None,
         device=None,
         ):        
 
@@ -160,12 +159,6 @@ def train_eval_loop_many(
         model.to(device)
         
         train_stats_all[nrun] = train_eval_loop(model, hgraph, train_mask, val_mask, test_mask, lr, num_epochs, printevery, verbose)
-    
-    if save_dir is not None:
-        if save_name is None:
-            save_name = f"train_stats_{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
-        with open(os.path.join(save_dir, save_name), 'wb') as f:
-            pickle.dump(train_stats_all, f)
 
     return train_stats_all
 

@@ -1,0 +1,8 @@
+name: random_unif_house
+
+num_nodes: 400
+num_edges: 200
+num_houses: 100
+k: 3
+features: zeros
+num_classes: 4
