@@ -1,5 +1,8 @@
 import os
 import pickle
+import json
+from pathlib import Path
+import pandas as pd
 from datetime import datetime
 import hydra
 from omegaconf import DictConfig, OmegaConf
@@ -8,7 +11,7 @@ import torch
 import hypernetx as hnx
 
 from load_coraca import get_coraca_hypergraph
-from hgraph import generate_random_hypergraph, generate_random_uniform_hypergraph, attach_houses_to_incidence_dict, incidence_matrix_to_edge_index
+from hgraph import generate_random_hypergraph, generate_random_uniform_hypergraph, attach_houses_to_incidence_dict, incidence_matrix_to_edge_index, add_random_edges_to_incidence_dict
 
 from models import MyHyperGCN, HyperGCN, HyperResidGCN
 
@@ -18,16 +21,25 @@ from train_utils import get_train_val_test_mask, train_eval_loop, train_eval_loo
 
 def make_random_house(cfg):
 
-    if cfg.name == "random_house":
+    if cfg.name == "random_house" or cfg.name == "random_house_perturbed":
         h_base = generate_random_hypergraph(cfg.num_nodes, cfg.num_edges)
-    if cfg.name == "random_unif_house":
+    elif cfg.name == "random_unif_house":
         h_base = generate_random_uniform_hypergraph(cfg.num_nodes, cfg.num_edges, cfg.k)
+    else:
+        raise NotImplementedError
 
     # anchor_nodes = torch.randint(low=0, high=h_base.number_of_nodes(), size=(num_houses,)).tolist()
     anchor_nodes = range(cfg.num_houses)
-    incmat_deco, labels_deco = attach_houses_to_incidence_dict(anchor_nodes, h_base.incidence_dict, h_base.number_of_nodes(), h_base.number_of_edges())
-    h_deco = hnx.Hypergraph(incmat_deco)
+    incdict_deco, labels_deco = attach_houses_to_incidence_dict(anchor_nodes, h_base.incidence_dict, h_base.number_of_nodes(), h_base.number_of_edges())
 
+    num_nodes_deco = len(set([node for lst in incdict_deco.values() for node in lst]))
+    num_edges_deco = len(incdict_deco)
+    assert num_nodes_deco == h_base.number_of_nodes() + 4 * cfg.num_houses
+    assert num_edges_deco == h_base.number_of_edges() + 3 * cfg.num_houses
+
+    incdict_deco = add_random_edges_to_incidence_dict(cfg.num_random_edges, incdict_deco, num_nodes_deco, num_edges_deco, cfg.deg_random_edges)
+
+    h_deco = hnx.Hypergraph(incdict_deco)
     print(f"{h_base.number_of_nodes()=}, {h_base.number_of_edges()=}")
     print(f"{h_deco.number_of_nodes()=}, {h_deco.number_of_edges()=}")
 
@@ -60,6 +72,8 @@ def make_hgraph(cfg):
     if cfg.name == "coraca":
         hgraph = get_coraca_hypergraph(split=[0.5, 0.25, 0.25], split_seed=cfg.split_seed)
     elif cfg.name == "random_house":
+        hgraph = make_random_house(cfg)
+    elif cfg.name == "random_house_perturbed":
         hgraph = make_random_house(cfg)
     elif cfg.name == "random_unif_house":
         hgraph = make_random_house(cfg)
@@ -109,7 +123,7 @@ def save_stats(train_stats, cfg):
 
 
 
-def add_hgraph_to_dict(train_stats, hgraph):
+def hgraph_to_dict(hgraph):
     
     dict_hgraph = dict(
         incidence_dict = hgraph.incidence_dict,
@@ -122,7 +136,34 @@ def add_hgraph_to_dict(train_stats, hgraph):
         edge_index = hgraph.edge_index,
     )
 
-    train_stats["hgraph"] = dict_hgraph
+    return dict_hgraph
+
+
+
+def save_stuff(cfg, train_stats, hgraph, model):
+
+    path = Path(cfg.save_dir)
+    if cfg.save_datestamp:
+        path = path / f"_{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
+    path.mkdir(exist_ok=True, parents=True)
+
+    # save cfg
+    dict_cfg = OmegaConf.to_container(cfg)
+    with open(path / "cfg.json", "w") as f:
+        json.dump(dict_cfg, f, indent=4)
+
+    # save train_stats
+    train_stats = pd.DataFrame.from_dict(train_stats)
+    train_stats = train_stats.set_index("epoch")
+    train_stats.to_csv(path / "train_stats.csv")
+
+    # save hgraph
+    dict_hgraph = hgraph_to_dict(hgraph)
+    with open(path / "hgraph.pickle", "wb") as f:
+        pickle.dump(dict_hgraph, f)
+    
+    # save model
+    torch.save(model.state_dict(), path / "model")
 
 
 
@@ -174,12 +215,13 @@ def main(cfg : DictConfig) -> None:
     # )
 
 
-    train_stats["config"] = cfg
-    add_hgraph_to_dict(train_stats, hgraph)
+    # train_stats["config"] = cfg
+    # add_hgraph_to_dict(train_stats, hgraph)
 
 
-    save_model(model, cfg)
-    save_stats(train_stats, cfg)
+    # save_model(model, cfg)
+    # save_stats(train_stats, cfg)
+    save_stuff(cfg, train_stats, hgraph, model)
 
 
 

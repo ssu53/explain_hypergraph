@@ -1,0 +1,5 @@
+name: base
+lr: 0.001
+num_epochs: 250
+printevery: 50
+verbose: True

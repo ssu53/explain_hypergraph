@@ -4,6 +4,8 @@ defaults:
   - model: gcn
   - train: base
 
-save_dir: train_results/random_unif_house
-save_name: untitled
+save_dir: train_results/random_unif_house/untitled
 save_datestamp: False
+
+hydra:  
+  output_subdir: null  

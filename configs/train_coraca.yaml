@@ -4,6 +4,8 @@ defaults:
   - model: gcn_resid
   - train: quick
 
-save_dir: train_results/hgcn_resid
-save_name: coraca_xlayer_lrx_alphax_betax_dropoutx
+save_dir: train_results/hgcn_resid/coraca_xlayer_lrx_alphax_betax_dropoutx
 save_datestamp: False
+
+hydra:  
+  output_subdir: null  

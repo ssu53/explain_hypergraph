@@ -1,9 +1,11 @@
 defaults:
   - _self_
-  - hgraph: random_unif_house
+  - hgraph: random_house_perturbed
   - model: gcn
   - train: base
 
-save_dir: train_results/random_unif_house
-save_name: untitled
+save_dir: train_results/random_house_perturbed/run
 save_datestamp: False
+
+hydra:  
+  output_subdir: null  

@@ -1,4 +1,6 @@
 import torch
+from numpy.random import choice
+
 
 
 def attach_house_to_incidence_dict(node_anchor: int, incidence_dict, num_nodes: int, num_edges: int):
@@ -51,3 +53,36 @@ def attach_houses_to_incidence_dict(node_anchors, incidence_dict, num_nodes: int
     
 
     return incidence_dict, labels
+
+
+
+def add_random_edges_to_incidence_dict(num_random_edges: int, incidence_dict, num_nodes: int, num_edges: int, k: int = 2):
+
+    assert num_edges == len(incidence_dict)
+    ind_edge = num_edges
+
+    for _ in range(num_random_edges):
+        incidence_dict[f"e{ind_edge:04}"] = choice(range(num_nodes), size=k, replace=False).tolist()
+        ind_edge += 1
+    
+    return incidence_dict
+
+
+
+if __name__ == "__main__":
+
+    import networkx as nx
+    import hypernetx as hnx
+    from random_hgraph import generate_random_hypergraph
+
+    h1 = generate_random_hypergraph(num_nodes=10, num_edges=6)
+
+    h2 = hnx.Hypergraph(add_random_edges_to_incidence_dict(num_random_edges=3, incidence_dict=h1.incidence_dict, num_nodes=h1.number_of_nodes(), num_edges=h1.number_of_edges(), k=3))
+
+    print(h1.shape)
+    print(h2.shape)
+
+    print(h1.incidence_dict)
+    print(h2.incidence_dict)
+
+    hnx.draw(h2, layout=nx.spring_layout)
