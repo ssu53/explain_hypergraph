@@ -131,7 +131,7 @@ class MyHyperGCN(nn.Module):
 
 class HyperResidGCN(nn.Module):
     
-    def __init__(self, input_dim, output_dim, hidden_dim, num_layers, alpha, beta, dropout=0):
+    def __init__(self, input_dim, output_dim, hidden_dim, num_layers, alpha, beta, dropout=0, symmetric_norm: bool = True, bias: bool = True):
         """
         Args:
             input_dim: dimension of input features per node
@@ -153,9 +153,12 @@ class HyperResidGCN(nn.Module):
         self.alpha = alpha
         self.beta = beta
 
+        self.symmetric_norm = symmetric_norm
+        self.bias = bias
+
         self.fc_in = nn.Linear(input_dim, hidden_dim)
 
-        self.gcn_layers = [MyHypergraphConvResid(hidden_dim, hidden_dim, alpha, np.log(beta / (ind_layer+1) + 1)) for ind_layer in range(num_layers)]
+        self.gcn_layers = [MyHypergraphConvResid(hidden_dim, hidden_dim, alpha, np.log(beta / (ind_layer+1) + 1), symmetric_norm, bias) for ind_layer in range(num_layers)]
         self.gcn_layers = nn.ModuleList(self.gcn_layers)
 
         self.fc_out = nn.Linear(hidden_dim, output_dim)

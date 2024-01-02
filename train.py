@@ -106,23 +106,6 @@ def get_model_class(model):
 
 
 
-def save_model(model, cfg):
-    fname = os.path.join(cfg.save_dir, cfg.save_name + "_model")
-    if cfg.save_datestamp:
-        fname += f"_{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
-    torch.save(model.state_dict(), fname)
-
-
-
-def save_stats(train_stats, cfg):
-    fname = os.path.join(cfg.save_dir, cfg.save_name)
-    if cfg.save_datestamp:
-        fname += f"_{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
-    with open(fname, 'wb') as f:
-        pickle.dump(train_stats, f)
-
-
-
 def hgraph_to_dict(hgraph):
     
     dict_hgraph = dict(
@@ -214,13 +197,6 @@ def main(cfg : DictConfig) -> None:
     #     device=device,
     # )
 
-
-    # train_stats["config"] = cfg
-    # add_hgraph_to_dict(train_stats, hgraph)
-
-
-    # save_model(model, cfg)
-    # save_stats(train_stats, cfg)
     save_stuff(cfg, train_stats, hgraph, model)
 
 

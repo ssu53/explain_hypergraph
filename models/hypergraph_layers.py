@@ -117,7 +117,7 @@ class MyHypergraphAtt(nn.Module):
 
 class MyHypergraphConvResid(nn.Module):
 
-    def __init__(self, input_dim, output_dim, alpha, beta):
+    def __init__(self, input_dim, output_dim, alpha, beta, symmetric_norm: bool = True, bias: bool = True):
         """
         One layer of a hyper neural net
 
@@ -130,9 +130,10 @@ class MyHypergraphConvResid(nn.Module):
 
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.Linear = nn.Linear(input_dim, output_dim) # implements W
+        self.Linear = nn.Linear(input_dim, output_dim, bias=bias) # implements W
         self.alpha = alpha
         self.beta = beta
+        self.symmetric_norm = symmetric_norm
     
     def forward(self, x, H, x0):
         """
@@ -143,10 +144,13 @@ class MyHypergraphConvResid(nn.Module):
             x: output of one HNN layer [num_nodes, output_dim]
         """
 
-        deg_node_inv_half = torch.nan_to_num(torch.pow(torch.diag(torch.sum(H, axis=1)), -0.5), nan=0, posinf=0, neginf=0).to(torch.float32) # (D_v)^(-0.5)
-        deg_edge_inv       = torch.nan_to_num(torch.pow(torch.diag(torch.sum(H, axis=0)), -1.0), nan=0, posinf=0, neginf=0).to(torch.float32) # (D_e)^(-1)
+        if self.symmetric_norm:
+            deg_node_inv_half = torch.nan_to_num(torch.pow(torch.diag(torch.sum(H, axis=1)), -0.5), nan=0, posinf=0, neginf=0).to(torch.float32) # (D_v)^(-0.5)
+            deg_edge_inv       = torch.nan_to_num(torch.pow(torch.diag(torch.sum(H, axis=0)), -1.0), nan=0, posinf=0, neginf=0).to(torch.float32) # (D_e)^(-1)
+            x = (1 - self.alpha) * deg_node_inv_half @ H @ deg_edge_inv @ H.T @ deg_node_inv_half @ x + self.alpha * x0
+        else:
+            x = (1 - self.alpha) * H @ H.T @ x + self.alpha * x0
         
-        x = (1 - self.alpha) * deg_node_inv_half @ H @ deg_edge_inv @ H.T @ deg_node_inv_half @ x + self.alpha * x0
         x = self.beta * x + (1 - self.beta) * self.Linear(x)
 
         return x

@@ -9,3 +9,6 @@ save_datestamp: False
 
 hydra:  
   output_subdir: null  
+  run:  
+    dir: .
+  
