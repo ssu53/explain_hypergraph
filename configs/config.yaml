@@ -4,7 +4,7 @@ defaults:
   - model: gcn
   - train: base
 
-save_dir: train_results/random_house_perturbed/run
+save_dir: train_results/debug
 save_datestamp: False
 
 hydra:  

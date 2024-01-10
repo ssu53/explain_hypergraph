@@ -1,0 +1,4 @@
+name: load
+
+num_house_types: 1
+path: data/random_house/cfg1/hgraph1.pickle

@@ -1,7 +1,10 @@
 name: random_house
 
+base: random
 num_nodes: 400
 num_edges: 200
 num_houses: 100
+num_house_types: 1
 features: zeros
-num_classes: 4
+num_random_edges: 0
+deg_random_edges: 0

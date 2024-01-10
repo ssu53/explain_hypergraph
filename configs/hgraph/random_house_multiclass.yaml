@@ -1,0 +1,14 @@
+name: random_house_multiclass
+
+base: random
+num_nodes: 400
+num_edges: 200
+num_houses: 100
+num_house_types: 2
+num_random_edges: 50
+deg_random_edges: 2
+
+features: multiclass_normal
+dim_feat: 16
+w: 10.0
+sigma: 1.0

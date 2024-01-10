@@ -1,6 +1,6 @@
 import torch
 from numpy.random import choice
-
+from numpy import floor
 
 
 def attach_house_to_incidence_dict(node_anchor: int, incidence_dict, num_nodes: int, num_edges: int):
@@ -24,7 +24,7 @@ def attach_house_to_incidence_dict(node_anchor: int, incidence_dict, num_nodes: 
 
 
 
-def attach_houses_to_incidence_dict(node_anchors, incidence_dict, num_nodes: int, num_edges: int):
+def attach_houses_to_incidence_dict(node_anchors, incidence_dict, num_nodes: int, num_edges: int, num_house_types: int = 1):
     """
     Attach house motifs to base graph given by incidence_dict, attached at node_anchors
 
@@ -36,23 +36,32 @@ def attach_houses_to_incidence_dict(node_anchors, incidence_dict, num_nodes: int
         labels: node labels where 0 = base graph, 1 = top of house, 2 = middle of house, 3 = bottom of house
     """
 
-    labels = torch.zeros((num_nodes + len(node_anchors) * 4), dtype=torch.int64)
+    num_nodes_final = (num_nodes + len(node_anchors) * 4)
+    labels_structure = torch.zeros(num_nodes_final, dtype=torch.int64)
+    labels_type = torch.zeros(num_nodes_final, dtype=torch.int64)
 
-    for node_anchor in node_anchors:
+    for i,node_anchor in enumerate(node_anchors):
         
         incidence_dict = attach_house_to_incidence_dict(node_anchor, incidence_dict, num_nodes, num_edges)
         
-        labels[node_anchor] = 2
-        labels[num_nodes + 0] = 1
-        labels[num_nodes + 1] = 2
-        labels[num_nodes + 2] = 3
-        labels[num_nodes + 3] = 3
+        labels_structure[node_anchor] = 2
+        labels_structure[num_nodes + 0] = 1
+        labels_structure[num_nodes + 1] = 2
+        labels_structure[num_nodes + 2] = 3
+        labels_structure[num_nodes + 3] = 3
+
+        house_type = floor(i / (len(node_anchors) / num_house_types)) + 1
+        labels_type[node_anchor] = house_type
+        labels_type[num_nodes + 0] = house_type
+        labels_type[num_nodes + 1] = house_type
+        labels_type[num_nodes + 2] = house_type
+        labels_type[num_nodes + 3] = house_type
         
         num_nodes = num_nodes + 4
         num_edges = num_edges + 3
     
 
-    return incidence_dict, labels
+    return incidence_dict, labels_structure, labels_type
 
 
 
@@ -69,6 +78,20 @@ def add_random_edges_to_incidence_dict(num_random_edges: int, incidence_dict, nu
 
 
 
+def unify_labels(labels_structure, labels_type):
+    assert labels_structure.shape == labels_type.shape
+    labels = labels_structure + 3 * torch.clip(labels_type-1, min=0, max=None)
+    return labels
+
+
+
+def split_labels(labels):
+    labels_type = (labels-1).div(3, rounding_mode="floor") + 1
+    labels_structure = labels - (labels-1).div(3, rounding_mode="trunc") * 3
+    return labels_structure, labels_type
+
+
+
 if __name__ == "__main__":
 
     import networkx as nx
@@ -77,12 +100,29 @@ if __name__ == "__main__":
 
     h1 = generate_random_hypergraph(num_nodes=10, num_edges=6)
 
-    h2 = hnx.Hypergraph(add_random_edges_to_incidence_dict(num_random_edges=3, incidence_dict=h1.incidence_dict, num_nodes=h1.number_of_nodes(), num_edges=h1.number_of_edges(), k=3))
+    h2_incdict, h2_labels_strc, h2_labels_type = attach_houses_to_incidence_dict([0,1,2,], h1.incidence_dict, h1.number_of_nodes(), h1.number_of_edges(), num_house_types=3)
+    h2 = hnx.Hypergraph(h2_incdict)
+    h3 = hnx.Hypergraph(add_random_edges_to_incidence_dict(num_random_edges=3, incidence_dict=h2.incidence_dict, num_nodes=h2.number_of_nodes(), num_edges=h2.number_of_edges(), k=3))
 
     print(h1.shape)
     print(h2.shape)
+    print(h3.shape)
 
     print(h1.incidence_dict)
     print(h2.incidence_dict)
+    print(h3.incidence_dict)
 
+    hnx.draw(h1, layout=nx.spring_layout)
     hnx.draw(h2, layout=nx.spring_layout)
+    hnx.draw(h3, layout=nx.spring_layout)
+
+    h2_labels = unify_labels(h2_labels_strc, h2_labels_type)
+
+    print(h2_labels_strc)
+    print(h2_labels_type)
+    print(h2_labels)
+
+    h2_labels_strc_recon, h2_labels_type_recon = split_labels(h2_labels)
+    assert torch.equal(h2_labels_strc, h2_labels_strc_recon)
+    assert torch.equal(h2_labels_type, h2_labels_type_recon)
+

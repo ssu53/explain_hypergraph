@@ -1,0 +1,11 @@
+name: random_house_small
+
+base: random
+num_nodes: 100
+num_edges: 50
+num_houses: 25
+num_house_types: 1
+num_random_edges: 15
+deg_random_edges: 2
+
+features: ones

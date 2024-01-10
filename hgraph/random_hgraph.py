@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import torch
 
 import hypernetx as hnx
 from networkx.algorithms.bipartite import gnmk_random_graph
@@ -50,3 +51,54 @@ def generate_random_hypergraph(num_nodes, num_edges):
     hgraph = hnx.Hypergraph.from_incidence_matrix(H, node_names, edge_names)
 
     return hgraph
+
+
+
+def get_trivial_features(labels, feature_type: str):
+
+    assert len(labels.shape) == 1
+    num_nodes = len(labels)
+
+    if feature_type == "zeros":
+        return torch.zeros((num_nodes, 1), dtype=torch.float32)
+    elif feature_type == "ones":
+        return torch.ones((num_nodes, 1), dtype=torch.float32)
+    elif feature_type == "randn":
+        return torch.randn((num_nodes, 1), dtype=torch.float32)
+    else:
+        raise NotImplementedError
+
+
+
+def get_multiclass_normal_features(labels, num_classes: int, dim_feat: int = 16, w: float = 10.0, sigma: float = 1.0):
+
+    assert w >= 0
+    assert len(labels.shape) == 1
+    assert torch.all(labels < num_classes)
+
+    # standard uniform between -w and w
+    mu_motif_type = torch.rand((num_classes, dim_feat)) * 2*w - w
+    mu = mu_motif_type[labels]
+    
+    features = torch.normal(mean=mu, std=sigma).to(torch.float32)
+
+    return features
+
+
+
+if __name__ == "__main__":
+
+    import matplotlib.pyplot as plt
+
+    my_num_house_types = 3
+    my_labels_type = torch.arange(my_num_house_types+1)
+    my_labels_type = torch.tile(my_labels_type, (20,))
+
+    my_features = get_multiclass_normal_features(my_labels_type, my_num_house_types+1, dim_feat=3, w=10.0, sigma=1.0)
+
+    fig = plt.figure()
+    ax = plt.axes(projection ='3d')
+    x, y, z = my_features.split(split_size=(1,1,1), dim=1)
+    ax.scatter(x, y, z, c=my_labels_type, cmap="Dark2")
+    ax.set_title('features')
+    plt.show()

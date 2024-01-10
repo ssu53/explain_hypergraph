@@ -42,6 +42,8 @@ class HyperGCN(nn.Module):
         self.gcn_layers = nn.ModuleList(self.gcn_layers)
 
         self.drop = nn.Dropout(p=dropout)
+
+        self.emb_layer = self.gcn_layers[-2] if num_layers > 1 else None # this layer's activations are the final latent embedding
     
     
     def forward(self, hgraph):
@@ -108,6 +110,8 @@ class MyHyperGCN(nn.Module):
 
         self.drop = nn.Dropout(p=dropout)
 
+        self.emb_layer = self.gcn_layers[-2] if num_layers > 1 else None # this layer's activations are the final latent embedding
+
     
     def forward(self, hgraph):
         """
@@ -163,6 +167,8 @@ class HyperResidGCN(nn.Module):
 
         self.fc_out = nn.Linear(hidden_dim, output_dim)
         self.drop = nn.Dropout(p=dropout)
+
+        self.emb_layer = self.gcn_layers[-1] # this layer's activations are the final latent embedding
     
     
     def forward(self, hgraph):

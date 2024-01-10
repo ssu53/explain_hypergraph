@@ -1,4 +1,5 @@
 name: coraca
 
+base: coraca
 split_seed: 3
 num_classes: 7
