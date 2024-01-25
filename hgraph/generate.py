@@ -5,7 +5,7 @@ from .random_hgraph import get_trivial_features, get_multiclass_normal_features
 from .load_coraca import get_coraca_hypergraph
 from .random_hgraph import generate_random_hypergraph, generate_random_uniform_hypergraph
 from .motif import unify_labels, attach_houses_to_incidence_dict, add_random_edges_to_incidence_dict
-from .utils import incidence_matrix_to_edge_index, load_hgraph, get_train_val_test_mask
+from .utils import incidence_matrix_to_edge_index, load_hgraph, get_split_mask
 
 
 
@@ -49,11 +49,6 @@ def decorate_and_perturb(cfg, h_base):
 
 def populate_attributes(cfg, hgraph, labels_strc, labels_type):
 
-    train_mask, val_mask, test_mask = get_train_val_test_mask(n=hgraph.number_of_nodes(), split=[0.8, 0.2, 0.0], seed=3)
-    hgraph.train_mask = train_mask
-    hgraph.val_mask = val_mask
-    hgraph.test_mask = test_mask
-
     if cfg.features in ["zeros", "ones", "randn"]:
         hgraph.x = get_trivial_features(labels_strc, feature_type=cfg.features)
     elif cfg.features == "multiclass_normal":
@@ -63,6 +58,14 @@ def populate_attributes(cfg, hgraph, labels_strc, labels_type):
     hgraph.y = unify_labels(labels_strc, labels_type)
     hgraph.H = torch.tensor(hgraph.incidence_matrix().toarray())
     hgraph.edge_index = incidence_matrix_to_edge_index(hgraph.H)
+
+    train_mask, val_mask, test_mask = get_split_mask(n=hgraph.number_of_nodes(), stratify=hgraph.y, split=[0.8, 0.2, 0.0], seed=3)
+    hgraph.train_mask = train_mask
+    hgraph.val_mask = val_mask
+    hgraph.test_mask = test_mask
+
+    hgraph.num_house_types = 1
+    hgraph.num_classes = hgraph.num_house_types * 3 + 1
 
     return hgraph
 

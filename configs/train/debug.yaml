@@ -1,5 +1,6 @@
-name: base
+name: debug
 lr: 0.001
 num_epochs: 250
 printevery: 50
+save_best: False
 verbose: True

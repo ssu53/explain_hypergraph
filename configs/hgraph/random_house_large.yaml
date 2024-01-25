@@ -1,0 +1,11 @@
+name: random_house_large
+
+base: random
+num_nodes: 800
+num_edges: 400
+num_houses: 200
+num_house_types: 1
+num_random_edges: 140
+deg_random_edges: 2
+
+features: ones

@@ -1,7 +1,7 @@
 defaults:
   - _self_
   - hgraph: random_house_perturbed
-  - model: gcn
+  - model: gcn_resid
   - train: base
 
 save_dir: train_results/debug

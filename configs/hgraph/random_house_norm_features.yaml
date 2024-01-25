@@ -1,10 +1,10 @@
-name: random_house_multiclass
+name: random_house_norm_features
 
 base: random
 num_nodes: 400
 num_edges: 200
 num_houses: 100
-num_house_types: 2
+num_house_types: 1
 num_random_edges: 70
 deg_random_edges: 2
 

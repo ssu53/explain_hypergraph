@@ -1,0 +1,7 @@
+hidden_dim: 16
+num_layers: 2
+alpha: 0.4
+beta: 0.0
+symmetric_norm: False
+bias: True
+dropout: 0.0

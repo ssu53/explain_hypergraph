@@ -1,0 +1,6 @@
+name: gcn_att
+model: MyHyperGCN
+
+defaults:
+- _self_
+- model_params: gcn_att

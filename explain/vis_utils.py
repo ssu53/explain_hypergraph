@@ -51,7 +51,7 @@ def plot_clusters(data: np.ndarray, labels: np.ndarray, num_clusters: int, layer
 
 
 
-def plot_cluster_activations(activations: Dict[str, torch.Tensor], layer_name: str, num_clusters: int = 5):
+def plot_cluster_activations(activations: Dict[str, torch.Tensor], layer_name: str, num_clusters: int = 5, plot: bool = True):
 
     activ = activations[layer_name].detach().cpu()
 
@@ -65,6 +65,7 @@ def plot_cluster_activations(activations: Dict[str, torch.Tensor], layer_name: s
     kmeans_model = KMeans(num_clusters, random_state=0, n_init='auto').fit(activ)
     cluster_labels = kmeans_model.predict(activ)
 
-    plot_clusters(activ_pca, cluster_labels, num_clusters, layer_name)
+    if plot:
+        plot_clusters(activ_pca, cluster_labels, num_clusters, layer_name)
 
     return activ, kmeans_model

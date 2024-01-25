@@ -1,0 +1,6 @@
+name: gcn_pg
+model: HyperGCN
+
+defaults:
+- _self_
+- model_params: gcn_pg

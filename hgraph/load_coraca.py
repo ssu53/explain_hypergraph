@@ -2,7 +2,7 @@ import torch
 import hypernetx as hnx
 import dhg
 
-from .utils import get_train_val_test_mask, incidence_matrix_to_edge_index
+from .utils import get_split_mask, incidence_matrix_to_edge_index
 
 
 

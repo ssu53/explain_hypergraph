@@ -147,7 +147,7 @@ def eval(graph, model, mask):
 
 
 
-def train_eval_loop(model, hgraph, train_mask, val_mask, test_mask, lr, num_epochs, contr_lambda=0.1, contr_margin=0.25, contr_batch_size=256, contr_psim=0.0, printevery=10, verbose=True, **kwargs):
+def train_eval_loop(model, hgraph, train_mask, val_mask, test_mask, lr, num_epochs, contr_lambda=0.1, contr_margin=0.25, contr_batch_size=256, contr_psim=0.0, printevery=10, save_best=False, verbose=True, **kwargs):
     
     optimiser = torch.optim.Adam(model.parameters(), lr=lr)
     train_stats = None
@@ -168,6 +168,9 @@ def train_eval_loop(model, hgraph, train_mask, val_mask, test_mask, lr, num_epoc
         'train_loss_contr': torch.nan,
     }
     train_stats = update_stats(train_stats, epoch_stats)
+
+    best_train_acc = train_acc
+    best_model = None
 
     for epoch in range(1,num_epochs+1): # 1-index the epochs
 
@@ -210,10 +213,14 @@ def train_eval_loop(model, hgraph, train_mask, val_mask, test_mask, lr, num_epoc
         }
         train_stats = update_stats(train_stats, epoch_stats)
 
+        if save_best and (train_acc > best_train_acc):
+            best_train_acc = train_acc
+            best_model = model.deepcopy(model)
+
     if verbose:
         print(f"Final train acc: {train_acc:.3f} | val acc: {val_acc:.3f} | test acc: {test_acc:.3f} ")
 
-    return train_stats
+    return train_stats, best_model
 
 
 

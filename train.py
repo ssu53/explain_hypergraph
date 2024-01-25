@@ -7,8 +7,8 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 import torch
-from models import MyHyperGCN, HyperResidGCN
-from train_utils import train_eval_loop
+from models import MyHyperGCN, HyperResidGCN, HyperGCN
+from train.train_utils import train_eval_loop
 from hgraph.utils import put_hgraph_attributes_on_device, hgraph_to_dict
 from hgraph.generate import make_hgraph
 
@@ -20,12 +20,14 @@ def get_model_class(model):
         return MyHyperGCN
     elif model == "HyperResidGCN":
         return HyperResidGCN
+    elif model == "HyperGCN":
+        return HyperGCN
     else:
         raise NotImplementedError
 
 
 
-def save_stuff(cfg, train_stats, hgraph, model):
+def save_stuff(cfg, train_stats, hgraph, model, best_model):
 
     path = Path(cfg.save_dir)
     if cfg.save_datestamp:
@@ -49,6 +51,8 @@ def save_stuff(cfg, train_stats, hgraph, model):
     
     # save model
     torch.save(model.state_dict(), path / "model")
+    if best_model is not None:
+        torch.save(best_model.state_dict(), path / "best_model")
 
 
 
@@ -67,13 +71,13 @@ def main(cfg : DictConfig) -> None:
 
     model_args = dict(cfg.model.model_params)
     model_args["input_dim"] = hgraph.x.shape[1]
-    model_args["output_dim"] = cfg.hgraph.num_house_types * 3 + 1
+    model_args["output_dim"] = hgraph.num_classes
     model = get_model_class(cfg.model.model)(**model_args)
     model.to(device)
     print(model)
 
 
-    train_stats = train_eval_loop(
+    train_stats, best_model = train_eval_loop(
         model=model,
         hgraph=hgraph,
         train_mask=hgraph.train_mask,
@@ -82,21 +86,7 @@ def main(cfg : DictConfig) -> None:
         **cfg.train,
     )
 
-    # train_stats = train_eval_loop_many(
-    #     nruns=10,
-    #     model_class=get_model_class(cfg.model.model),
-    #     model_args=model_args,
-    #     hgraph=hgraph,
-    #     train_mask=hgraph.train_mask,
-    #     val_mask=hgraph.val_mask,
-    #     test_mask=hgraph.test_mask,
-    #     lr=cfg.train.lr,
-    #     num_epochs=cfg.train.num_epochs,
-    #     verbose=cfg.train.verbose,
-    #     device=device,
-    # )
-
-    save_stuff(cfg, train_stats, hgraph, model)
+    save_stuff(cfg, train_stats, hgraph, model, best_model)
 
 
 

@@ -1,6 +1,7 @@
 import torch
 import pickle
 import hypernetx as hnx
+from sklearn.model_selection import train_test_split
 
 
 
@@ -25,12 +26,32 @@ def incidence_matrix_to_incidence_dict(H):
 
 
 
-def get_train_val_test_mask(n, split, seed):
+def get_split_mask(n, stratify, split, seed):
 
-    split_rand_generator = torch.Generator().manual_seed(seed)
-    node_index = range(n)
-    train_inds, val_inds, test_inds = torch.utils.data.random_split(node_index, split, generator=split_rand_generator)
+    assert len(split) == 3 # train, val, test
+    train_frac, val_frac, test_frac = split
 
+    node_inds = range(n)
+
+    train_inds, nontrain_inds = train_test_split(
+        node_inds,
+        train_size=train_frac,
+        random_state=seed,
+        stratify=stratify)
+
+    if test_frac == 0:
+        val_inds = nontrain_inds
+        test_inds = []
+    elif val_frac == 0:
+        val_inds = []
+        test_inds = nontrain_inds
+    else:
+        val_inds, test_inds = train_test_split(
+            nontrain_inds,
+            train_size=split[1]/(split[1]+split[2]),
+            random_state=seed,
+            stratify=stratify[nontrain_inds] if stratify is not None else None)
+    
     train_mask = torch.zeros(n, dtype=bool)
     train_mask[train_inds] = True
 
@@ -53,6 +74,8 @@ def hgraph_to_dict(hgraph):
         test_mask = hgraph.test_mask,
         x = hgraph.x,
         y = hgraph.y,
+        num_house_types = hgraph.num_house_types,
+        num_classes = hgraph.num_classes,
         H = hgraph.H,
         edge_index = hgraph.edge_index,
     )
@@ -67,6 +90,11 @@ def load_hgraph(path):
     hgraph = hnx.Hypergraph(hgraph_dict["incidence_dict"])
     hgraph.x = hgraph_dict['x']
     hgraph.y = hgraph_dict['y']
+    try:
+        hgraph.num_house_types = hgraph_dict['num_house_types']
+        hgraph.num_classes = hgraph_dict['num_classes']
+    except:
+        pass
     hgraph.train_mask = hgraph_dict['train_mask']
     hgraph.val_mask = hgraph_dict['val_mask']
     hgraph.test_mask = hgraph_dict['test_mask']

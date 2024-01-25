@@ -16,8 +16,8 @@ def main(cfg : DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
     n = 10
-    path = Path('data/random_house/cfg2')
-    path.mkdir(exist_ok=True, parents=True)
+    path = Path('data/_unnamed')
+    path.mkdir(exist_ok=False, parents=True)
 
 
     # save cfg

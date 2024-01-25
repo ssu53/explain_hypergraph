@@ -8,7 +8,7 @@ from .hypergraph_layers import MyHypergraphConv, MyHypergraphAtt, MyHypergraphCo
 
 class HyperGCN(nn.Module):
     
-    def __init__(self, input_dim, output_dim, hidden_dim, num_layers, use_attention=False, attention_mode='node', heads=1, dropout=0):
+    def __init__(self, input_dim, output_dim, hidden_dim, num_layers, use_attention=False, attention_mode='node', heads=1, bias=True, dropout=0):
         """
         Args:
             input_dim: dimension of input features per node
@@ -34,9 +34,9 @@ class HyperGCN(nn.Module):
 
         self.gcn_layers = []
         if num_layers > 1:
-            self.gcn_layers += [HypergraphConv(input_dim, hidden_dim, use_attention, attention_mode, heads)]
-            self.gcn_layers += [HypergraphConv(hidden_dim, hidden_dim, use_attention, attention_mode, heads) for _ in range(num_layers-2)]
-            self.gcn_layers += [HypergraphConv(hidden_dim, output_dim, use_attention, attention_mode, heads)]
+            self.gcn_layers += [HypergraphConv(input_dim, hidden_dim, use_attention, attention_mode, heads, bias=bias)]
+            self.gcn_layers += [HypergraphConv(hidden_dim, hidden_dim, use_attention, attention_mode, heads, bias=bias) for _ in range(num_layers-2)]
+            self.gcn_layers += [HypergraphConv(hidden_dim, output_dim, use_attention, attention_mode, heads, bias=bias)]
         else:
             self.gcn_layers += [HypergraphConv(input_dim, output_dim, use_attention, attention_mode, heads)]
         self.gcn_layers = nn.ModuleList(self.gcn_layers)

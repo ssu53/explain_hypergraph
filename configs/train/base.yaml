@@ -9,4 +9,5 @@ contr_batch_size: 0
 contr_psim: 0
 
 printevery: 500
+save_best: False
 verbose: True

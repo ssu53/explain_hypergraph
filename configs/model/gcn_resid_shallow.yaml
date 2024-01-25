@@ -1,0 +1,6 @@
+name: gcn_resids_shallow
+model: HyperResidGCN
+
+defaults:
+- _self_
+- model_params: gcn_resid_shallow
