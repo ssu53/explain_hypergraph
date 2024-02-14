@@ -15,4 +15,7 @@ pip install pandas
 pip install scipy
 pip install scikit-learn
 pip install hydra-core
+pip install seaborn
+pip install torch-explain
+pip install pyarrow
 ```

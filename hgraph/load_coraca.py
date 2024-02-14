@@ -1,6 +1,6 @@
 import torch
 import hypernetx as hnx
-import dhg
+# import dhg
 
 from .utils import get_split_mask, incidence_matrix_to_edge_index
 
@@ -40,6 +40,8 @@ def get_train_val_test_mask_standardsplit():
 
 
 def get_coraca_hypergraph(split=[0.5, 0.25, 0.25], split_seed=3) -> hnx.Hypergraph:
+
+    raise NotImplementedError # TODO: alternate coathorship-cora loading. dhg incompatible with newer PyTorch.
 
     coraca_dhg = dhg.data.CoauthorshipCora(data_root='data')
     hgraph_coraca = get_hgraph_from_edgelist(coraca_dhg['num_vertices'], coraca_dhg['num_edges'], coraca_dhg['edge_list'])

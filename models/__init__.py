@@ -1,1 +1,1 @@
-from .hypergraph_models import HyperGCN, MyHyperGCN, HyperResidGCN
+from .hypergraph_models import *
