@@ -1,5 +1,7 @@
 # Install dependencies
 
+Tested with Python 3.10.12.
+
 ```
 pip install torch
 pip install numpy
