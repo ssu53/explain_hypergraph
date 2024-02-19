@@ -163,7 +163,7 @@ def load_citation_dataset(path='../hyperGCN/data/', dataset = 'cora', train_perc
         edge_idx += 1
 
     edge_index = np.array([ node_list + edge_list,
-                            edge_list + node_list], dtype = np.int32)
+                            edge_list + node_list], dtype = np.int)
     edge_index = torch.LongTensor(edge_index)
 
     data = Data(x = features,

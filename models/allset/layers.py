@@ -24,6 +24,8 @@ from torch_geometric.utils import softmax
 from torch_scatter import scatter_add, scatter
 from torch_geometric.typing import Adj, Size, OptTensor
 from typing import Optional
+from torch_scatter import scatter, scatter_mean
+
 
 # This part is for PMA.
 # Modified from GATConv in pyg.
@@ -284,7 +286,7 @@ class HNHNConv(MessagePassing):
 #         x = torch.matmul(torch.diag(data.D_v_beta), x)
         x = data.D_v_beta.unsqueeze(-1) * x
 
-        self.flow = 'source_to_target'
+        # self.flow = 'source_to_target'
         out = self.propagate(hyperedge_index, x=x, norm=data.D_e_beta_inv,
                              size=(num_nodes, num_edges))
         
@@ -299,8 +301,8 @@ class HNHNConv(MessagePassing):
 #         out = torch.matmul(torch.diag(data.D_e_alpha), out)
         out = data.D_e_alpha.unsqueeze(-1) * out
 
-        self.flow = 'target_to_source'
-        out = self.propagate(hyperedge_index, x=out, norm=data.D_v_alpha_inv,
+        # self.flow = 'target_to_source'
+        out = self.propagate(hyperedge_index.flip([0]), x=out, norm=data.D_v_alpha_inv,
                              size=(num_edges, num_nodes))
         
         return out
@@ -380,13 +382,15 @@ class HypergraphConv(MessagePassing):
             self.concat = concat
             self.negative_slope = negative_slope
             self.dropout = dropout
-            self.weight = Parameter(
-                torch.Tensor(in_channels, heads * out_channels))
+            # self.weight = Parameter(
+                # torch.Tensor(in_channels, heads * out_channels))   
             self.att = Parameter(torch.Tensor(1, heads, 2 * out_channels))
+            self.lin = Linear(in_channels, heads * out_channels, bias=False)
         else:
             self.heads = 1
             self.concat = True
-            self.weight = Parameter(torch.Tensor(in_channels, out_channels))
+            self.lin = Linear(in_channels, out_channels, bias=False)
+            # self.weight = Parameter(torch.Tensor(in_channels, out_channels))
 
         if bias and concat:
             self.bias = Parameter(torch.Tensor(heads * out_channels))
@@ -398,13 +402,15 @@ class HypergraphConv(MessagePassing):
         self.reset_parameters()
 
     def reset_parameters(self):
-        glorot(self.weight)
+        self.lin.reset_parameters()
         if self.use_attention:
             glorot(self.att)
         zeros(self.bias)
 
     def forward(self, x: Tensor, hyperedge_index: Tensor,
-                hyperedge_weight: Optional[Tensor] = None) -> Tensor:
+                hyperedge_weight: Optional[Tensor] = None,
+                hyperedge_attr: Optional[Tensor] = None,
+                alpha: Optional[Tensor] = None) -> Tensor:
         r"""
         Args:
             x (Tensor): Node feature matrix :math:`\mathbf{X}`
@@ -422,13 +428,29 @@ class HypergraphConv(MessagePassing):
         if hyperedge_weight is None:
             hyperedge_weight = x.new_ones(num_edges)
 
-        x = torch.matmul(x, self.weight)
+        if hyperedge_attr is None:
+            hyperedge_attr = scatter_mean(x[hyperedge_index[0]],hyperedge_index[1], dim=0)
+        # x = torch.matmul(x, self.weight)
+        x = self.lin(x)
 
         alpha = None
+        # if self.use_attention:
+        #     print('USE ATTENTION')
+        #     assert num_edges <= num_edges
+        #     x = x.view(-1, self.heads, self.out_channels)
+        #     x_i, x_j = x[hyperedge_index[0]], x[hyperedge_index[1]]
+        #     alpha = (torch.cat([x_i, x_j], dim=-1) * self.att).sum(dim=-1)
+        #     alpha = F.leaky_relu(alpha, self.negative_slope)
+        #     alpha = softmax(alpha, hyperedge_index[0], num_nodes=x.size(0))
+        #     alpha = F.dropout(alpha, p=self.dropout, training=self.training)
         if self.use_attention:
-            assert num_edges <= num_edges
+            assert hyperedge_attr is not None
             x = x.view(-1, self.heads, self.out_channels)
-            x_i, x_j = x[hyperedge_index[0]], x[hyperedge_index[1]]
+            hyperedge_attr = self.lin(hyperedge_attr)
+            hyperedge_attr = hyperedge_attr.view(-1, self.heads,
+                                                 self.out_channels)
+            x_i = x[hyperedge_index[0]]
+            x_j = hyperedge_attr[hyperedge_index[1]]
             alpha = (torch.cat([x_i, x_j], dim=-1) * self.att).sum(dim=-1)
             alpha = F.leaky_relu(alpha, self.negative_slope)
             alpha = softmax(alpha, hyperedge_index[0], num_nodes=x.size(0))
@@ -445,11 +467,11 @@ class HypergraphConv(MessagePassing):
             B = 1.0 / B
             B[B == float("inf")] = 0
 
-            self.flow = 'source_to_target'
+            # self.flow = 'source_to_target'
             out = self.propagate(hyperedge_index, x=x, norm=B, alpha=alpha,
                                  size=(num_nodes, num_edges))
-            self.flow = 'target_to_source'
-            out = self.propagate(hyperedge_index, x=out, norm=D, alpha=alpha,
+            # self.flow = 'target_to_source'
+            out = self.propagate(hyperedge_index.flip([0]), x=out, norm=D, alpha=alpha,
                                  size=(num_edges, num_nodes))
         else:  # this correspond to HGNN
             D = scatter_add(hyperedge_weight[hyperedge_index[1]],
@@ -463,11 +485,11 @@ class HypergraphConv(MessagePassing):
             B[B == float("inf")] = 0
 
             x = D.unsqueeze(-1)*x
-            self.flow = 'source_to_target'
+            # self.flow = 'source_to_target'
             out = self.propagate(hyperedge_index, x=x, norm=B, alpha=alpha,
                                  size=(num_nodes, num_edges))
-            self.flow = 'target_to_source'
-            out = self.propagate(hyperedge_index, x=out, norm=D, alpha=alpha,
+            # self.flow = 'target_to_source'
+            out = self.propagate(hyperedge_index.flip([0]), x=out, norm=D, alpha=alpha,
                                  size=(num_edges, num_nodes))
 
         if self.concat is True:
@@ -640,7 +662,7 @@ class HalfNLHconv(MessagePassing):
         return norm.view(-1, 1) * x_j
 
     def aggregate(self, inputs, index,
-                  dim_size=None, aggr='add'):
+                  dim_size=None, aggr=None):
         r"""Aggregates messages from neighbors as
         :math:`\square_{j \in \mathcal{N}(i)}`.
 

@@ -255,13 +255,13 @@ def parse_method(args, data):
         #              n_class=args.num_classes,
         #              n_hid=args.MLP_hidden,
         #              dropout=args.dropout)
-        model = HCHA(args)
+        model = HCHA(args, use_attention=False)
 
     elif args.method == 'HNHN':
         model = HNHN(args)
 
     elif args.method == 'HCHA':
-        model = HCHA(args)
+        model = HCHA(args, use_attention=True)
 
     elif args.method == 'MLP':
         model = MLP_model(args)

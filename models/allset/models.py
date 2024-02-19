@@ -23,6 +23,7 @@ import math
 
 from torch_scatter import scatter
 from torch_geometric.utils import softmax
+from torch_scatter import scatter, scatter_mean
 
 #  This part is for HyperGCN
 
@@ -255,7 +256,7 @@ class HCHA(nn.Module):
     is implemented in pyg.
     """
 
-    def __init__(self, args):
+    def __init__(self, args, use_attention):
         super(HCHA, self).__init__()
 
         self.num_layers = args.All_num_layers
@@ -265,13 +266,13 @@ class HCHA(nn.Module):
 #         Note that add dropout to attention is default in the original paper
         self.convs = nn.ModuleList()
         self.convs.append(HypergraphConv(args.num_features,
-                                         args.MLP_hidden, self.symdegnorm))
+                                         args.MLP_hidden, self.symdegnorm, use_attention=use_attention))
         for _ in range(self.num_layers-2):
             self.convs.append(HypergraphConv(
-                args.MLP_hidden, args.MLP_hidden, self.symdegnorm))
+                args.MLP_hidden, args.MLP_hidden, self.symdegnorm, use_attention=use_attention))
         # Output heads is set to 1 as default
         self.convs.append(HypergraphConv(
-            args.MLP_hidden, args.num_classes, self.symdegnorm))
+            args.MLP_hidden, args.num_classes, self.symdegnorm, use_attention=use_attention))
 
     def reset_parameters(self):
         for conv in self.convs:
