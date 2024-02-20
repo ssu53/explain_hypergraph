@@ -5,3 +5,4 @@ beta: 0.0
 symmetric_norm: False
 bias: True
 dropout: 0.0
+len_readout: False

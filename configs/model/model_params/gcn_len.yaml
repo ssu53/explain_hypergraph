@@ -3,4 +3,4 @@ num_layers: 3
 symmetric_norm: False
 bias: True
 dropout: 0.0
-len_readout: False
+len_readout: True

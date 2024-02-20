@@ -11,12 +11,8 @@ def get_model_class(model):
 
     if model == "MyHyperGCN":
         return MyHyperGCN
-    elif model == "MyHyperGCNLen":
-        return MyHyperGCNLen
     elif model == "HyperResidGCN":
         return HyperResidGCN
-    elif model == "HyperResidGCNLen":
-        return HyperResidGCNLen
     elif model == "HyperGCN":
         return HyperGCN
     else:
@@ -60,8 +56,6 @@ class HyperGCN(nn.Module):
         self.gcn_layers = nn.ModuleList(self.gcn_layers)
 
         self.drop = nn.Dropout(p=dropout)
-
-        self.emb_layer = self.gcn_layers[-2] if num_layers > 1 else None # this layer's activations are the final latent embedding
     
     
     def forward(self, hgraph):
@@ -94,7 +88,7 @@ class HyperGCN(nn.Module):
 
 class MyHyperGCN(nn.Module):
     
-    def __init__(self, input_dim: int, output_dim: int, hidden_dim: int, num_layers: int, symmetric_norm: bool = True, bias: bool = True, use_attention=False, dropout=0):
+    def __init__(self, input_dim: int, output_dim: int, hidden_dim: int, num_layers: int, symmetric_norm: bool = True, bias: bool = True, use_attention=False, dropout: float = 0.0, len_readout: bool = False):
         """
         Args:
             input_dim: dimension of input features per node
@@ -113,81 +107,28 @@ class MyHyperGCN(nn.Module):
         self.symmetric_norm = symmetric_norm
         self.bias = bias
 
+        self.len_readout = len_readout
+
         self.use_attention = use_attention
         if use_attention:   MyHypergraphLayer = MyHypergraphAtt
         else:               MyHypergraphLayer = MyHypergraphConv
 
-        self.gcn_layers = []
-        if num_layers > 1:
-            self.gcn_layers += [MyHypergraphLayer(input_dim, hidden_dim, symmetric_norm, bias)]
-            self.gcn_layers += [MyHypergraphLayer(hidden_dim, hidden_dim, symmetric_norm, bias) for _ in range(num_layers-2)]
-            self.gcn_layers += [MyHypergraphLayer(hidden_dim, output_dim, symmetric_norm, bias)]
+        self.fc_in = nn.Linear(input_dim, hidden_dim)
+
+        self.gcn_layers = [MyHypergraphLayer(hidden_dim, hidden_dim, symmetric_norm, bias) for _ in range(num_layers)]
+        self.gcn_layers = nn.ModuleList(self.gcn_layers)
+
+
+        if len_readout:
+            self.len = torch.nn.Sequential(te.nn.EntropyLinear(hidden_dim, 1, n_classes=output_dim))            
         else:
-            self.gcn_layers += [MyHypergraphLayer(input_dim, output_dim, symmetric_norm, bias)]
-        self.gcn_layers = nn.ModuleList(self.gcn_layers)
-
-        self.drop = nn.Dropout(p=dropout)
-
-        self.emb_layer = self.gcn_layers[-2] if num_layers > 1 else None # this layer's activations are the final latent embedding
-
-    
-    def forward(self, hgraph):
-        """
-        Args:
-            hgraph: hypergraph object (needs attributes x and incidence matrix H)
-        Returns:
-            y: logits for each node [num_nodes, output_dim]
-        """
-
-        x = hgraph.x.to(torch.float32)
-        H = hgraph.H.to(torch.float32)
-
-        for ind_layer,layer in enumerate(self.gcn_layers):
-            x = layer(x, H)
-            if ind_layer != self.num_layers-1: # no activation before logits
-                x = torch.nn.functional.relu(x)
-                x = self.drop(x)
-        
-        return x
-
-
-
-class MyHyperGCNLen(nn.Module):
-    
-    def __init__(self, input_dim: int, output_dim: int, hidden_dim: int, num_layers: int, symmetric_norm: bool = True, bias: bool = True, use_attention=False, dropout=0):
-        """
-        Args:
-            input_dim: dimension of input features per node
-            output_dim: dimension of output features per node
-            hidden_dim: dimension of hidden features per node
-            num_layers: number of layers
-        """
-
-        super().__init__()
-
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.hidden_dim = hidden_dim
-        self.num_layers = num_layers
-
-        self.symmetric_norm = symmetric_norm
-        self.bias = bias
-
-        self.use_attention = use_attention
-        if use_attention:   MyHypergraphLayer = MyHypergraphAtt
-        else:               MyHypergraphLayer = MyHypergraphConv
-
-        self.gcn_layers = []
-        self.gcn_layers += [MyHypergraphLayer(input_dim, hidden_dim, symmetric_norm, bias)]
-        self.gcn_layers += [MyHypergraphLayer(hidden_dim, hidden_dim, symmetric_norm, bias) for _ in range(num_layers-1)]
-        self.gcn_layers = nn.ModuleList(self.gcn_layers)
-        
-        self.len = torch.nn.Sequential(te.nn.EntropyLinear(hidden_dim, 1, n_classes=output_dim))
+            self.fc_out = nn.Linear(hidden_dim, output_dim)
 
         self.drop = nn.Dropout(p=dropout)
 
         self.concepts = None
 
+
     
     def forward(self, hgraph):
         """
@@ -200,26 +141,35 @@ class MyHyperGCNLen(nn.Module):
         x = hgraph.x.to(torch.float32)
         H = hgraph.H.to(torch.float32)
 
+        x = self.fc_in(x)
+
         for ind_layer,layer in enumerate(self.gcn_layers):
             x = layer(x, H)
+            if (not self.len_readout) and (ind_layer == self.num_layers-1): self.concepts = x
             x = torch.nn.functional.relu(x)
             x = self.drop(x)
         
-        x = torch.nn.functional.softmax(x, dim=-1)
-        x = torch.div(x, torch.max(x, dim=-1)[0].unsqueeze(1))
-        self.concepts = x
         
-        x = self.len(x)
+        if self.len_readout:
+    
+            x = torch.nn.functional.softmax(x, dim=-1)
+            x = torch.div(x, torch.max(x, dim=-1)[0].unsqueeze(1))
+            self.concepts = x
+        
+            x = self.len(x)
+            x = x.squeeze(-1)
+        
+        else:
+            x = self.fc_out(x)
 
-        x = x.squeeze(-1)
-
+        
         return x
 
 
 
 class HyperResidGCN(nn.Module):
     
-    def __init__(self, input_dim, output_dim, hidden_dim, num_layers, alpha, beta, dropout=0, symmetric_norm: bool = True, bias: bool = True):
+    def __init__(self, input_dim, output_dim, hidden_dim, num_layers, alpha, beta, dropout=0, symmetric_norm: bool = True, bias: bool = True, len_readout: bool = False):
         """
         Args:
             input_dim: dimension of input features per node
@@ -244,78 +194,18 @@ class HyperResidGCN(nn.Module):
         self.symmetric_norm = symmetric_norm
         self.bias = bias
 
-        self.fc_in = nn.Linear(input_dim, hidden_dim)
-
-        self.gcn_layers = [MyHypergraphConvResid(hidden_dim, hidden_dim, alpha, np.log(beta / (ind_layer+1) + 1), symmetric_norm, bias) for ind_layer in range(num_layers)]
-        self.gcn_layers = nn.ModuleList(self.gcn_layers)
-
-        self.fc_out = nn.Linear(hidden_dim, output_dim)
-        self.drop = nn.Dropout(p=dropout)
-
-        self.emb_layer = self.gcn_layers[-1] # this layer's activations are the final latent embedding
-    
-    
-    def forward(self, hgraph):
-        """
-        Args:
-            hgraph: hypergraph object (needs attributes x and incidence matrix H)
-        Returns:
-            y: logits for each node [num_nodes, output_dim]
-        """
-
-        x = hgraph.x.to(torch.float32)
-        H = hgraph.H.to(torch.float32)
-
-        x = self.fc_in(x)
-        x0 = x
-
-        for ind_layer,layer in enumerate(self.gcn_layers):
-            x = self.drop(x)
-            x = layer(x, H, x0)
-            if ind_layer != self.num_layers-1: # no activation before logits
-                x = torch.nn.functional.relu(x)
-        
-        x = self.drop(x)
-        x = self.fc_out(x)
-        
-        return x
-
-
-
-class HyperResidGCNLen(nn.Module):
-    
-    def __init__(self, input_dim, output_dim, hidden_dim, num_layers, alpha, beta, dropout=0, symmetric_norm: bool = True, bias: bool = True):
-        """
-        Args:
-            input_dim: dimension of input features per node
-            output_dim: dimension of output features per node
-            hidden_dim: dimension of hidden features per node
-            num_layers: number of layers
-            dropout: dropout rate. dropout between all layers.
-
-            For now, treat alpha and beta as constant across all layers
-        """
-
-        super().__init__()
-
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.hidden_dim = hidden_dim
-        self.num_layers = num_layers
-
-        self.alpha = alpha
-        self.beta = beta
-
-        self.symmetric_norm = symmetric_norm
-        self.bias = bias
+        self.len_readout = len_readout
 
         self.fc_in = nn.Linear(input_dim, hidden_dim)
 
         self.gcn_layers = [MyHypergraphConvResid(hidden_dim, hidden_dim, alpha, np.log(beta / (ind_layer+1) + 1), symmetric_norm, bias) for ind_layer in range(num_layers)]
         self.gcn_layers = nn.ModuleList(self.gcn_layers)
 
-        self.len = torch.nn.Sequential(te.nn.EntropyLinear(hidden_dim, 1, n_classes=output_dim))
-
+        if len_readout:
+            self.len = torch.nn.Sequential(te.nn.EntropyLinear(hidden_dim, 1, n_classes=output_dim))
+        else:
+            self.fc_out = nn.Linear(hidden_dim, output_dim)
+        
         self.drop = nn.Dropout(p=dropout)
 
         self.concepts = None
@@ -336,18 +226,22 @@ class HyperResidGCNLen(nn.Module):
         x0 = x
 
         for ind_layer,layer in enumerate(self.gcn_layers):
-            x = self.drop(x)
             x = layer(x, H, x0)
+            if (not self.len_readout) and (ind_layer == self.num_layers-1): self.concepts = x
             x = torch.nn.functional.relu(x)
+            x = self.drop(x)        
         
-        x = self.drop(x)
+        if self.len_readout:
     
-        x = torch.nn.functional.softmax(x, dim=-1)
-        x = torch.div(x, torch.max(x, dim=-1)[0].unsqueeze(1))
-        self.concepts = x
+            x = torch.nn.functional.softmax(x, dim=-1)
+            x = torch.div(x, torch.max(x, dim=-1)[0].unsqueeze(1))
+            self.concepts = x
         
-        x = self.len(x)
-
-        x = x.squeeze(-1)
-
+            x = self.len(x)
+            x = x.squeeze(-1)
+        
+        else:
+            x = self.fc_out(x)
+            
+        
         return x

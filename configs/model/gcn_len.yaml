@@ -1,6 +1,6 @@
 name: gcn_len
-model: MyHyperGCNLen
+model: MyHyperGCN
 
 defaults:
 - _self_
-- model_params: gcn
+- model_params: gcn_len
