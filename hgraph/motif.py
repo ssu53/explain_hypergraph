@@ -3,9 +3,9 @@ from numpy.random import choice
 from numpy import floor
 
 
-def attach_house_to_incidence_dict(node_anchor: int, incidence_dict, num_nodes: int, num_edges: int):
+def attach_house_to_incidence_dict(node_anchor: int, incidence_dict, num_nodes: int, num_edges: int, with_outer_hedge: bool = True):
     """
-    Attaches a house motif to base graph given by incidence_dict, attached at node_anchor
+    Attaches a house motif to base graph given by incidence_dict, connected with an order-2 hyperedge to node_anchor
 
     edge names must be by convention: e0001, e0002, ...
     node names must be by convention: 0, 1, 2, ...
@@ -16,15 +16,17 @@ def attach_house_to_incidence_dict(node_anchor: int, incidence_dict, num_nodes: 
 
     assert num_edges == len(incidence_dict)
 
-    incidence_dict[f"e{num_edges  :04}"] = [node_anchor, num_nodes+0, num_nodes+1]
-    incidence_dict[f"e{num_edges+1:04}"] = [node_anchor, num_nodes+1, num_nodes+2, num_nodes+3]
-    incidence_dict[f"e{num_edges+2:04}"] = [node_anchor, num_nodes+0, num_nodes+1, num_nodes+2, num_nodes+3]
+    incidence_dict[f"e{num_edges  :04}"] = [node_anchor, num_nodes+1]                           # join to base graph
+    incidence_dict[f"e{num_edges+1:04}"] = [num_nodes+0, num_nodes+1, num_nodes+2]              # top and middle of house
+    incidence_dict[f"e{num_edges+2:04}"] = [num_nodes+1, num_nodes+2, num_nodes+3, num_nodes+4] # middle and botom of house
+    if with_outer_hedge:
+        incidence_dict[f"e{num_edges+3:04}"] = [num_nodes+0, num_nodes+1, num_nodes+2, num_nodes+3, num_nodes+4]
 
     return incidence_dict
 
 
 
-def attach_houses_to_incidence_dict(node_anchors, incidence_dict, num_nodes: int, num_edges: int, num_house_types: int = 1):
+def attach_houses_to_incidence_dict(node_anchors, incidence_dict, num_nodes: int, num_edges: int, num_house_types: int = 1, with_outer_hedge: bool = True):
     """
     Attach house motifs to base graph given by incidence_dict, attached at node_anchors
 
@@ -36,29 +38,30 @@ def attach_houses_to_incidence_dict(node_anchors, incidence_dict, num_nodes: int
         labels: node labels where 0 = base graph, 1 = top of house, 2 = middle of house, 3 = bottom of house
     """
 
-    num_nodes_final = (num_nodes + len(node_anchors) * 4)
+    num_nodes_final = (num_nodes + len(node_anchors) * 5)
     labels_structure = torch.zeros(num_nodes_final, dtype=torch.int64)
     labels_type = torch.zeros(num_nodes_final, dtype=torch.int64)
 
     for i,node_anchor in enumerate(node_anchors):
         
-        incidence_dict = attach_house_to_incidence_dict(node_anchor, incidence_dict, num_nodes, num_edges)
+        incidence_dict = attach_house_to_incidence_dict(node_anchor, incidence_dict, num_nodes, num_edges, with_outer_hedge)
         
-        labels_structure[node_anchor] = 2
         labels_structure[num_nodes + 0] = 1
         labels_structure[num_nodes + 1] = 2
-        labels_structure[num_nodes + 2] = 3
+        labels_structure[num_nodes + 2] = 2
         labels_structure[num_nodes + 3] = 3
+        labels_structure[num_nodes + 4] = 3
 
         house_type = floor(i / (len(node_anchors) / num_house_types)) + 1
-        labels_type[node_anchor] = house_type
         labels_type[num_nodes + 0] = house_type
         labels_type[num_nodes + 1] = house_type
         labels_type[num_nodes + 2] = house_type
         labels_type[num_nodes + 3] = house_type
+        labels_type[num_nodes + 4] = house_type
         
-        num_nodes = num_nodes + 4
-        num_edges = num_edges + 3
+        num_nodes = num_nodes + 5
+        num_edges = num_edges + 4 if with_outer_hedge else num_edges + 3
+        assert num_edges == len(incidence_dict)
     
 
     return incidence_dict, labels_structure, labels_type

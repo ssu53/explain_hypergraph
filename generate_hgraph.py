@@ -10,13 +10,13 @@ from hgraph.utils import hgraph_to_dict
 
 
 
-@hydra.main(version_base=None, config_path="configs/hgraph", config_name="random_house_small")
+@hydra.main(version_base=None, config_path="configs", config_name="generate_hgraph")
 def main(cfg : DictConfig) -> None:
 
     print(OmegaConf.to_yaml(cfg))
 
-    n = 10
-    path = Path('data/_unnamed')
+    n = cfg.num_graphs
+    path = Path(cfg.save_dir)
     path.mkdir(exist_ok=False, parents=True)
 
 
@@ -31,7 +31,7 @@ def main(cfg : DictConfig) -> None:
 
     for i in range(n):
 
-        hgraph = make_hgraph(cfg)
+        hgraph = make_hgraph(cfg.hgraph)
 
         # save hgraph
         dict_hgraph = hgraph_to_dict(hgraph)

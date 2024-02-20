@@ -1,10 +1,10 @@
 defaults:
   - _self_
-  - hgraph: random_house_perturbed
+  - hgraph: load
   - model: gcn_resid
   - train: base
 
-save_dir: train_results/debug
+save_dir: train_results/_unnamed
 save_datestamp: False
 
 hydra:  

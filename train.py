@@ -44,7 +44,7 @@ def save_stuff(cfg, train_stats, hgraph, model, best_model):
 
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="config")
+@hydra.main(version_base=None, config_path="configs", config_name="train")
 def main(cfg : DictConfig) -> None:
 
     print(OmegaConf.to_yaml(cfg))

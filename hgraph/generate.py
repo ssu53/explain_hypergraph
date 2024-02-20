@@ -31,13 +31,14 @@ def decorate_and_perturb(cfg, h_base):
         h_base.incidence_dict,
         h_base.number_of_nodes(),
         h_base.number_of_edges(),
-        cfg.num_house_types
+        cfg.num_house_types,
+        cfg.with_outer_hedge,
     )
 
     num_nodes = len(set([node for lst in incdict.values() for node in lst]))
     num_edges = len(incdict)
-    assert num_nodes == h_base.number_of_nodes() + 4 * cfg.num_houses
-    assert num_edges == h_base.number_of_edges() + 3 * cfg.num_houses
+    assert num_nodes == h_base.number_of_nodes() + 5 * cfg.num_houses
+    assert num_edges == h_base.number_of_edges() + 4 * cfg.num_houses if cfg.with_outer_hedge else h_base.number_of_edges() + 3 * cfg.num_houses
 
     incdict = add_random_edges_to_incidence_dict(cfg.num_random_edges, incdict, num_nodes, num_edges, cfg.deg_random_edges)
 

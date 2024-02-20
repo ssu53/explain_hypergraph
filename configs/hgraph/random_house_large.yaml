@@ -7,5 +7,6 @@ num_houses: 200
 num_house_types: 1
 num_random_edges: 140
 deg_random_edges: 2
+with_outer_hedge: True
 
 features: ones
