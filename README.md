@@ -20,4 +20,5 @@ pip install hydra-core
 pip install seaborn
 pip install torch-explain
 pip install pyarrow
+pip install igraph
 ```
