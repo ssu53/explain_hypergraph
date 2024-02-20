@@ -7,23 +7,11 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 import torch
-from models import MyHyperGCN, HyperResidGCN, HyperGCN
+from models import get_model_class
 from train.train_utils import train_eval_loop
 from hgraph.utils import put_hgraph_attributes_on_device, hgraph_to_dict
 from hgraph.generate import make_hgraph
 
-
-
-def get_model_class(model):
-
-    if model == "MyHyperGCN":
-        return MyHyperGCN
-    elif model == "HyperResidGCN":
-        return HyperResidGCN
-    elif model == "HyperGCN":
-        return HyperGCN
-    else:
-        raise NotImplementedError
 
 
 
