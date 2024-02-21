@@ -11,38 +11,39 @@ import scipy.sparse as sp
 
 from models.allset import *
 
-from train.train_utils import train_eval_loop
+from train import train_eval_loop, get_activations
 from hgraph.utils import load_hgraph
 from torch_geometric.data import Data
 
 
 class MyArgs:
     def __init__(self):
-        # self.dname = "coauthor_cora"
+        self.dname = "coauthor_cora"
         self.p2raw = "data/AllSet_all_raw_data/coauthorship/"
         self.method = "AllSetTransformer"
         self.add_self_loop = True
         self.exclude_self = False
         self.normtype = "all_one"
         self.runs = 20
-        self.train_prop = 0.5
+        # self.train_prop = 0.5
+        self.train_prop = 0.05 # try to overfit
         self.valid_prop = 0.25
         self.LearnMask = True
         self.All_num_layers = 2
         self.dropout = 0.5
         # self.aggregate = "mean"
-        self.aggregate = "sum"
+        self.aggregate = "add"
         self.normalization = "ln"
         # self.normalization = "None"
         self.deepset_input_norm = True
         self.GPR = True
-        # self.MLP_hidden = 64
-        self.MLP_hidden = 16
+        self.MLP_hidden = 64
+        # self.MLP_hidden = 16
         self.MLP_num_layers = 2
         self.heads = 1
         self.PMA = True
         self.Classifier_hidden = 64
-        self.Classifier_hidden = 16
+        # self.Classifier_hidden = 16
         self.Classifier_num_layers = 2
         self.cuda = 0
         self.lr = 0.001
@@ -55,6 +56,8 @@ class MyArgs:
         self.HNHN_beta = -0.5
         self.HNHN_nonlinear_inbetween = True
         self.UniGNN_use_norm = False
+        self.display_step = 50
+        self.wd = 0.0
 
 
 args = MyArgs()
@@ -62,24 +65,24 @@ args = MyArgs()
 
 # %%
 
-"""
+
 #--------
 # Allset dataset loading
 
 
-dataset = dataset_Hypergraph(
+dataset_allset = dataset_Hypergraph(
     name=args.dname,
     root = 'data/pyg_data/hypergraph_dataset_updated/',
     p2raw=args.p2raw)
 
-data = dataset.data
-print(data)
+data_allset = dataset_allset.data
+print(data_allset)
 
 
-args.num_features = dataset.num_features
-args.num_classes = dataset.num_classes
+args.num_features = dataset_allset.num_features
+args.num_classes = dataset_allset.num_classes
 
-"""
+#--------
 
 
 # %%
@@ -336,6 +339,35 @@ train_stats, best_model = train_eval_loop(
     printevery=50,
 )
 
+
+
+# %%
+
+with torch.no_grad():
+    out = model(data)
+print(out)
+
+
+# %%
+
+activations = {}
+hook_handles = {}
+
+h = model.convs[0].register_forward_hook(get_activations(f"conv0", activations))
+hook_handles[f"conv0"] = h
+
+h = model.convs[1].register_forward_hook(get_activations(f"conv1", activations))
+hook_handles[f"conv1"] = h
+
+with torch.no_grad():
+    out = model(data)
+
+# remove hooks to freeze activations
+for h in hook_handles.values(): h.remove()
+    
+print(activations.keys())
+print(activations['conv0'])
+print(activations['conv1'])
 
 
 # %%

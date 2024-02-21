@@ -675,6 +675,7 @@ class HalfNLHconv(MessagePassing):
         """
 #         ipdb.set_trace()
         if aggr is None:
-            raise ValueError("aggr was not passed!")
+            # raise ValueError("aggr was not passed!")
+            aggr = "add"
         return scatter(inputs, index, dim=self.node_dim, reduce=aggr)
 
