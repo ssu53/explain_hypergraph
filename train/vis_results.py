@@ -1,13 +1,43 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 import pandas as pd
 import seaborn as sns
 from collections import Counter
 
+from hgraph import load_hgraph, put_hgraph_attributes_on_device
+from models import get_model_class
 from train.train_utils import eval
 from omegaconf import OmegaConf
 import json
 
+
+
+
+def get_single_run(path, device=None):
+
+    with open(path / "cfg.json", "r") as f:
+        cfg = json.load(f)
+    cfg = OmegaConf.create(cfg)
+
+    train_stats = pd.read_csv(path / "train_stats.csv", index_col=0)
+
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    hgraph = load_hgraph(path / 'hgraph.pickle')
+    put_hgraph_attributes_on_device(hgraph, device)
+
+    model_args = dict(cfg.model.model_params)
+    model_args["input_dim"] = hgraph.x.shape[1]
+    model_args["output_dim"] = hgraph.num_classes
+
+    model = get_model_class(cfg.model.model)(**model_args)
+    model.load_state_dict(torch.load(path / "model"))
+    model.eval()
+    model.to(device)
+    
+    return cfg, train_stats, hgraph, model
 
 
 

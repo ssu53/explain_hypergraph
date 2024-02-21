@@ -68,11 +68,11 @@ def get_local_hypergraph(node_idx, hgraph: hnx.Hypergraph, num_expansions: int, 
         nodes_in_edge = get_nodes_of_edges(hgraph, [edge])
         neighb_dict[edge] = [node for node in nodes_in_edge if node in neighb_nodes]
     
-    H_neighb = hnx.Hypergraph(neighb_dict)
+    hgraph_local = hnx.Hypergraph(neighb_dict)
 
     if graph_data is not None: raise NotImplementedError
 
-    return H_neighb
+    return hgraph_local
 
 
 
@@ -151,7 +151,7 @@ def plot_samples(activ, kmeans_model, y, hgraph, num_expansions, num_nodes_view=
 
         if graph_data is None:
             for ax, new_G, node_idx, g_label in zip(ax_list, top_graphs, top_indices, labels):
-                hnx.draw(new_G.collapse_nodes(), ax=ax, with_node_counts=True, with_node_labels=True)
+                hnx.draw(new_G, ax=ax, with_node_counts=True, with_node_labels=True)
                 ax.set_title(f"label {g_label} node {node_idx}", fontsize=14)
         else:
             raise NotImplementedError

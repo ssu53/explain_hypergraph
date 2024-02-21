@@ -1,0 +1,10 @@
+defaults:
+  - _self_
+  - hgraph: random_house
+
+num_graphs: 10
+save_dir: data/_unnamed
+save_datestamp: False
+
+hydra:  
+  output_subdir: null  
