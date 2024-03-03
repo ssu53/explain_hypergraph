@@ -1,6 +1,7 @@
 from tqdm import tqdm
 import torch
 from models.graph_models import GCN
+import copy
 
 
 
@@ -215,7 +216,7 @@ def train_eval_loop(model, hgraph, train_mask, val_mask, test_mask, lr, num_epoc
 
         if save_best and (train_acc > best_train_acc):
             best_train_acc = train_acc
-            best_model = model.deepcopy(model)
+            best_model = copy.deepcopy(model)
 
     if verbose:
         print(f"Final train acc: {train_acc:.3f} | val acc: {val_acc:.3f} | test acc: {test_acc:.3f} ")

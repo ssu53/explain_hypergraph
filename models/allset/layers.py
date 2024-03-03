@@ -24,7 +24,7 @@ from torch_geometric.utils import softmax
 from torch_scatter import scatter_add, scatter
 from torch_geometric.typing import Adj, Size, OptTensor
 from typing import Optional
-from torch_scatter import scatter, scatter_mean
+from torch_scatter import scatter, scatter_mean, scatter_sum
 
 
 # This part is for PMA.
@@ -52,7 +52,7 @@ class PMA(MessagePassing):
 
     def __init__(self, in_channels, hid_dim,
                  out_channels, num_layers, heads=1, concat=True,
-                 negative_slope=0.2, dropout=0.0, bias=False, **kwargs):
+                 negative_slope=0.2, dropout=0.0, bias=False, alpha_softmax=True, **kwargs):
         #         kwargs.setdefault('aggr', 'add')
         super(PMA, self).__init__(node_dim=0, **kwargs)
 
@@ -64,6 +64,7 @@ class PMA(MessagePassing):
         self.negative_slope = negative_slope
         self.dropout = 0.
         self.aggr = 'add'
+        self.alpha_softmax = alpha_softmax
 #         self.input_seed = input_seed
 
 #         This is the encoder part. Where we use 1 layer NN (Theta*x_i in the GATConv description)
@@ -173,7 +174,8 @@ class PMA(MessagePassing):
         #         ipdb.set_trace()
         alpha = alpha_j
         alpha = F.leaky_relu(alpha, self.negative_slope)
-        alpha = softmax(alpha, index, ptr, index.max()+1)
+        if self.alpha_softmax:
+            alpha = softmax(alpha, index, ptr, index.max()+1)
         self._alpha = alpha
         alpha = F.dropout(alpha, p=self.dropout, training=self.training)
         return x_j * alpha.unsqueeze(-1)
@@ -367,7 +369,7 @@ class HypergraphConv(MessagePassing):
     """
 
     def __init__(self, in_channels, out_channels, symdegnorm=False, use_attention=False, heads=1,
-                 concat=True, negative_slope=0.2, dropout=0, bias=True,
+                 concat=True, negative_slope=0.2, dropout=0, bias=True, alpha_softmax=True,
                  **kwargs):
         kwargs.setdefault('aggr', 'add')
         super(HypergraphConv, self).__init__(node_dim=0, **kwargs)
@@ -376,6 +378,7 @@ class HypergraphConv(MessagePassing):
         self.out_channels = out_channels
         self.use_attention = use_attention
         self.symdegnorm = symdegnorm
+        self.alpha_softmax = alpha_softmax
 
         if self.use_attention:
             self.heads = heads
@@ -453,10 +456,20 @@ class HypergraphConv(MessagePassing):
             x_j = hyperedge_attr[hyperedge_index[1]]
             alpha = (torch.cat([x_i, x_j], dim=-1) * self.att).sum(dim=-1)
             alpha = F.leaky_relu(alpha, self.negative_slope)
-            alpha = softmax(alpha, hyperedge_index[0], num_nodes=x.size(0))
+            if self.alpha_softmax:
+                alpha = softmax(alpha, hyperedge_index[0], num_nodes=x.size(0))
             alpha = F.dropout(alpha, p=self.dropout, training=self.training)
 
-        if not self.symdegnorm:
+        if self.symdegnorm is None: # no degree normalisation
+            
+            D = torch.ones((num_nodes,), device=x.device)
+            B = torch.ones((num_edges,), device=x.device)
+
+            out = self.propagate(hyperedge_index, x=x, norm=B, alpha=alpha,
+                                 size=(num_nodes, num_edges))
+            out = self.propagate(hyperedge_index.flip([0]), x=out, norm=D, alpha=alpha, size=(num_edges, num_nodes))
+
+        elif not self.symdegnorm: # non-symmetric norm
             D = scatter_add(hyperedge_weight[hyperedge_index[1]],
                             hyperedge_index[0], dim=0, dim_size=num_nodes)
             D = 1.0 / D
@@ -612,7 +625,8 @@ class HalfNLHconv(MessagePassing):
                  Normalization='bn',
                  InputNorm=False,
                  heads=1,
-                 attention=True
+                 attention=True,
+                 alpha_softmax=True,
                  ):
         super(HalfNLHconv, self).__init__()
 
@@ -620,7 +634,7 @@ class HalfNLHconv(MessagePassing):
         self.dropout = dropout
 
         if self.attention:
-            self.prop = PMA(in_dim, hid_dim, out_dim, num_layers, heads=heads)
+            self.prop = PMA(in_dim, hid_dim, out_dim, num_layers, heads=heads, alpha_softmax=alpha_softmax)
         else:
             if num_layers > 0:
                 self.f_enc = MLP(in_dim, hid_dim, hid_dim, num_layers, dropout, Normalization, InputNorm)

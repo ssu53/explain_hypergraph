@@ -262,17 +262,19 @@ class HCHA(nn.Module):
         self.num_layers = args.All_num_layers
         self.dropout = args.dropout  # Note that default is 0.6
         self.symdegnorm = args.HCHA_symdegnorm
+        self.alpha_softmax = args.alpha_softmax
 
 #         Note that add dropout to attention is default in the original paper
         self.convs = nn.ModuleList()
         self.convs.append(HypergraphConv(args.num_features,
-                                         args.MLP_hidden, self.symdegnorm, use_attention=use_attention))
+                                         args.MLP_hidden, self.symdegnorm, use_attention=use_attention,
+                                         alpha_softmax=self.alpha_softmax))
         for _ in range(self.num_layers-2):
             self.convs.append(HypergraphConv(
-                args.MLP_hidden, args.MLP_hidden, self.symdegnorm, use_attention=use_attention))
+                args.MLP_hidden, args.MLP_hidden, self.symdegnorm, use_attention=use_attention, alpha_softmax=self.alpha_softmax))
         # Output heads is set to 1 as default
         self.convs.append(HypergraphConv(
-            args.MLP_hidden, args.num_classes, self.symdegnorm, use_attention=use_attention))
+            args.MLP_hidden, args.num_classes, self.symdegnorm, use_attention=use_attention, alpha_softmax=self.alpha_softmax))
 
     def reset_parameters(self):
         for conv in self.convs:
@@ -354,7 +356,9 @@ class SetGNN(nn.Module):
                                              Normalization=self.NormLayer,
                                              InputNorm=self.InputNorm,
                                              heads=args.heads,
-                                             attention=args.PMA))
+                                             attention=args.PMA,
+                                             alpha_softmax=args.alpha_softmax,
+                                             ))
             self.bnV2Es.append(nn.BatchNorm1d(args.MLP_hidden))
             self.E2VConvs.append(HalfNLHconv(in_dim=args.MLP_hidden,
                                              hid_dim=args.MLP_hidden,
@@ -364,7 +368,9 @@ class SetGNN(nn.Module):
                                              Normalization=self.NormLayer,
                                              InputNorm=self.InputNorm,
                                              heads=args.heads,
-                                             attention=args.PMA))
+                                             attention=args.PMA,
+                                             alpha_softmax=args.alpha_softmax,
+                                             ))
             self.bnE2Vs.append(nn.BatchNorm1d(args.MLP_hidden))
             for _ in range(self.All_num_layers-1):
                 self.V2EConvs.append(HalfNLHconv(in_dim=args.MLP_hidden,
@@ -375,7 +381,9 @@ class SetGNN(nn.Module):
                                                  Normalization=self.NormLayer,
                                                  InputNorm=self.InputNorm,
                                                  heads=args.heads,
-                                                 attention=args.PMA))
+                                                 attention=args.PMA,
+                                                 alpha_softmax=args.alpha_softmax,
+                                                 ))
                 self.bnV2Es.append(nn.BatchNorm1d(args.MLP_hidden))
                 self.E2VConvs.append(HalfNLHconv(in_dim=args.MLP_hidden,
                                                  hid_dim=args.MLP_hidden,
@@ -385,7 +393,9 @@ class SetGNN(nn.Module):
                                                  Normalization=self.NormLayer,
                                                  InputNorm=self.InputNorm,
                                                  heads=args.heads,
-                                                 attention=args.PMA))
+                                                 attention=args.PMA,
+                                                 alpha_softmax=args.alpha_softmax,
+                                                 ))
                 self.bnE2Vs.append(nn.BatchNorm1d(args.MLP_hidden))
             if self.GPR:
                 self.MLP = MLP(in_channels=args.num_features,
