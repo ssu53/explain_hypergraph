@@ -10,11 +10,12 @@ import networkx as nx
 from hgraph import incidence_matrix_to_edge_index
 from train.vis_results import get_single_run
 from explain import plot_concepts, ActivationClassifier, plot_samples, get_local_hypergraph
+from models.allset import norm_contruction
 
 # %%
 
 
-def enrich_features(hgraph, sub_hgraph):
+def enrich_features(hgraph, sub_hgraph, cfg):
 
     # ASSUME hgraph.incidence_matrix returns correctly sorted 
     node_idx = sorted(set([node for nodes in sub_hgraph.incidence_dict.values() for node in nodes]))
@@ -40,6 +41,10 @@ def enrich_features(hgraph, sub_hgraph):
     sub_hgraph.H = torch.tensor(sub_hgraph.incidence_matrix().toarray(), dtype=torch.float32)
     sub_hgraph.H_unmasked = torch.tensor(sub_hgraph.incidence_matrix().toarray(), dtype=torch.float32)
     sub_hgraph.edge_index = incidence_matrix_to_edge_index(sub_hgraph.H_unmasked)
+
+    if 'normtype' in cfg:
+        # needed for AllSet
+        sub_hgraph.norm = norm_contruction(sub_hgraph, option=cfg.normtype)
 
     assert all(hgraph.y[list(sub_hgraph.ind_to_node.values())] == sub_hgraph.y)
     assert all(hgraph.train_mask[list(sub_hgraph.ind_to_node.values())] == sub_hgraph.train_mask)
@@ -116,6 +121,8 @@ def hgnn_explain(
         # assert logits_target == model(hgraph)[hgraph.node_to_ind[node]]
         pred_target = logits_target.softmax(dim=-1)
         label_target = pred_target.argmax().item()
+        
+        print("Target logit distribution", np.round(pred_target.detach().cpu().numpy(),2))
 
 
     if init_strategy == "const":
@@ -228,11 +235,12 @@ def show_learnt_subgraph(hgraph_learn, thresh_num=None, thresh=None, node_to_inc
 
 
 # %%
-    
+
 
 # Load training results, compute cobncept completeness, show samples
 
-path = Path('train_results/s24_standard_v3/ones1/gcn_resid_len/run0')
+# path = Path('train_results/s24_standard_v3/ones1/gcn_resid_len/run0')
+path = Path('train_results/allsettransformer/')
 cfg, train_stats, hgraph, model = get_single_run(path, device=torch.device("cpu"))
 
 concepts, kmeans_model = plot_concepts(hgraph, model, num_clusters=7, binarise_concepts=False)
@@ -253,10 +261,14 @@ sample_graphs, sample_feats = plot_samples(concepts, kmeans_model, hgraph.y, hgr
 
 # Select node to explain
 
-node_idx = 546
+node_idx = 487
+
+# TODO: fix this hack
+hgraph.num_house_types = 1
+hgraph.num_classes = 4
 
 hgraph_local = get_local_hypergraph(node_idx=node_idx, hgraph=hgraph, num_expansions=3)
-enrich_features(hgraph, hgraph_local)
+enrich_features(hgraph, hgraph_local, cfg)
 
 # hnx.draw(hgraph_neighb.collapse_nodes(), with_node_counts=True, with_node_labels=True)
 hnx.draw(hgraph_local, with_node_labels=True)
@@ -280,4 +292,7 @@ hgnn_explain(
 # %%
 
 show_learnt_subgraph(hgraph_local, thresh_num=12, node_to_include=None)
+# %%
+
+show_learnt_subgraph(hgraph_local, thresh=0.5, node_to_include=None)
 # %%

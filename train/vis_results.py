@@ -5,12 +5,49 @@ import pandas as pd
 import seaborn as sns
 from collections import Counter
 
+import hypernetx as hnx
 from hgraph import load_hgraph, put_hgraph_attributes_on_device
 from models import get_model_class
 from train.train_utils import eval
+
 from omegaconf import OmegaConf
 import json
 
+
+
+
+def data_to_hnxhypergraph(data):
+    """
+    convention: nodes numbered from 0 corresponding to index, hedge numbered
+    """
+
+    from torch_geometric.data import Data
+    assert isinstance(data, Data)
+
+    num_nodes, num_edges = data.n_x, data.num_hyperedges
+
+    assert data.x.size(0) == num_nodes
+    assert data.y.size(0) == num_nodes
+    assert torch.max(data.edge_index[0]).item() == num_nodes-1
+    assert torch.max(data.edge_index[1]).item() == num_edges-1
+
+    incidence_dict = {}
+    for i in range(data.edge_index.size(1)):
+        node = data.edge_index[0,i].item()
+        hedge = data.edge_index[1,i].item()
+        node_name = node
+        edge_name = f"e{hedge:04}"
+        if edge_name not in incidence_dict:
+            incidence_dict[edge_name] = []
+        incidence_dict[edge_name].append(node_name)
+
+    hgraph = hnx.Hypergraph(incidence_dict)
+
+    for attr in data:
+        attr_name, attr_val = attr
+        setattr(hgraph, attr_name, attr_val)
+
+    return hgraph
 
 
 
@@ -25,14 +62,30 @@ def get_single_run(path, device=None):
     if device is None:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    hgraph = load_hgraph(path / 'hgraph.pickle')
-    put_hgraph_attributes_on_device(hgraph, device)
+    try:
+        # hgraphs saved as attributed hnx.Hypergraph
 
-    model_args = dict(cfg.model.model_params)
-    model_args["input_dim"] = hgraph.x.shape[1]
-    model_args["output_dim"] = hgraph.num_classes
+        hgraph = load_hgraph(path / 'hgraph.pickle')
+        put_hgraph_attributes_on_device(hgraph, device)
 
-    model = get_model_class(cfg.model.model)(**model_args)
+        model_args = dict(cfg.model.model_params)
+        model_args["input_dim"] = hgraph.x.shape[1]
+        model_args["output_dim"] = hgraph.num_classes
+
+        model = get_model_class(cfg.model.model)(**model_args)
+
+    except:
+        # hgraphs saved as torch_geometric.data.Data objects
+
+        data = torch.load(path / 'hgraph.pt')
+        data.to(device)
+
+        from train_allset import parse_method
+        model = parse_method(cfg, data)
+
+        hgraph = data_to_hnxhypergraph(data) 
+
+    
     model.load_state_dict(torch.load(path / "model"))
     model.eval()
     model.to(device)

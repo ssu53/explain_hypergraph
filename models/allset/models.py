@@ -425,6 +425,8 @@ class SetGNN(nn.Module):
 
 #         Now we simply use V_enc_hid=V_dec_hid=E_enc_hid=E_dec_hid
 #         However, in general this can be arbitrary.
+        
+        self.concepts = None
 
 
     def reset_parameters(self):
@@ -479,6 +481,7 @@ class SetGNN(nn.Module):
                 x = F.dropout(x, p=self.dropout, training=self.training)
             x = torch.stack(xs, dim=-1)
             x = self.GPRweights(x).squeeze()
+            self.concepts = x
             x = self.classifier(x)
         else:
             x = F.dropout(x, p=0.2, training=self.training) # Input dropout
@@ -490,6 +493,7 @@ class SetGNN(nn.Module):
                     x, reversed_edge_index, norm, self.aggr))
 #                 x = self.bnE2Vs[i](x)
                 x = F.dropout(x, p=self.dropout, training=self.training)
+            self.concepts = x
             x = self.classifier(x)
 
         return x

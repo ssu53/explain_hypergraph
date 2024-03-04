@@ -11,7 +11,10 @@ from hgraph.utils import load_hgraph
 from torch_geometric.data import Data
 
 from easydict import EasyDict
-
+from pathlib import Path
+from datetime import datetime
+import pandas as pd
+import json
 
 # %%
         
@@ -232,7 +235,11 @@ def further_process_data(data, args):
 
 
 
-def load_data(args, load_allset_data = False):
+def load_data(
+        args,
+        load_allset_data = False,
+        path_data = "data/standard/ones1/hgraph1.pickle",
+    ):
 
     
     if load_allset_data:
@@ -241,6 +248,7 @@ def load_data(args, load_allset_data = False):
         https://github.com/jianhao2016/AllSet/blob/main/src/train.py
         """
         
+        assert path_data is None, "Igoring data path, loading Allset's coauthor_cora"
         
         args.dname = "coauthor_cora"
         args.p2raw = "data/AllSet_all_raw_data/coauthorship/"
@@ -273,7 +281,7 @@ def load_data(args, load_allset_data = False):
 
 
         # Load example synthetic data hgraph
-        hgraph = load_hgraph("data/standard/ones1/hgraph1.pickle")
+        hgraph = load_hgraph(path_data)
 
         args.num_features = hgraph.x.shape[1]
         args.num_classes = hgraph.num_classes
@@ -390,16 +398,52 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
+
+def save_stuff(cfg, train_stats, hgraph, model, best_model):
+
+    path = Path(cfg.save_dir)
+    if cfg.save_datestamp:
+        path = path / f"_{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
+    path.mkdir(exist_ok=True, parents=True)
+
+    # save cfg
+    dict_cfg = cfg
+    with open(path / "cfg.json", "w") as f:
+        json.dump(dict_cfg, f, indent=4)
+
+    # save train_stats
+    train_stats = pd.DataFrame.from_dict(train_stats)
+    train_stats = train_stats.set_index("epoch")
+    train_stats.to_csv(path / "train_stats.csv")
+
+    # save hgraph in torch Data format
+    torch.save(hgraph, path / "hgraph.pt")
+    
+    # save model
+    torch.save(model.state_dict(), path / "model")
+    if best_model is not None:
+        torch.save(best_model.state_dict(), path / "best_model")
+
+
+
 # %%
 
 def main():
 
     method = "AllSetTransformer"
+    path_data = "data/standard/ones1/hgraph1.pickle"
+    save_dir = "train_results/allsettransformer"
+
+    # Gets args, data, device
+    # --------------------------------------
+    
     print(f"Running {method}...")
 
     args = get_args(method)
+    args.save_datestamp = False
+    args.save_dir = save_dir
 
-    data = load_data(args)
+    data = load_data(args, path_data=path_data)
 
     device = torch.device('cuda:'+str(args.cuda) if torch.cuda.is_available() else 'cpu')
 
@@ -476,6 +520,12 @@ def main():
     print()
     print("Best Model")
     print(f"train: {eval(data, best_model, train_mask):.3f} | val {eval(data, best_model, val_mask):.3f} | test {eval(data, best_model, test_mask):.3f} ")
+
+
+    # Save stuff
+    # --------------------------------------
+    
+    save_stuff(args, train_stats, data, model, best_model)
 
 
 
