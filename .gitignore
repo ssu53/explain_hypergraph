@@ -6,4 +6,4 @@ run_scripts
 run_outputs
 outputs
 train_results
-train.log
+wandb/

@@ -22,4 +22,5 @@ pip install torch-explain
 pip install pyarrow
 pip install igraph
 pip install easydict
+pip install wandb
 ```

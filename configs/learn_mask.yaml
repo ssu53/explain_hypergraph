@@ -1,0 +1,36 @@
+name: learn_mask
+
+load_fn: 'train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1'
+node_idx: [580, 750, 600, 605, 610, 615, 620, 625]  # class 1
+# node_idx: [636, 671, 466, 491, 496, 501, 506, 511]  # class 2, connected to base
+# node_idx: [637, 672, 487, 492, 497, 502, 507, 512]  # class 2, not connected to base
+# node_idx: [409, 689, 518, 519, 523, 524, 528, 529]  # class 3
+
+coeffs: 
+  # size: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]
+  # ent:  [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]
+  size: [0.005]
+  ent: [0.01]
+
+lr: 0.005
+num_epochs: 400
+scheduler: None
+
+seed: 42
+
+log_wandb: True
+wandb:
+  entity: "ssu53"
+  project: "hgraph_mask_coeffs"
+  experiment_name: ""
+
+defaults:  
+  - _self_  
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled  
+
+hydra:  
+  output_subdir: null  
+  run:  
+    dir: .
+  
