@@ -59,14 +59,8 @@ def plot_clusters(data: np.ndarray, labels: np.ndarray, num_clusters: int, fig_t
 
 def plot_activation_by_cluster(activ: torch.Tensor, num_clusters: int = 5, plot: bool = True, fig_title: str = "Activations by Cluster"):
 
-    activ = activ.detach().cpu()
-
     pca_model = PCA(n_components=2) # visualise in 2D
     activ_pca = pca_model.fit_transform(activ)
-
-    x_pca, y_pca = np.split(activ_pca, 2, axis=1)
-    x_pca = x_pca.squeeze(1)
-    y_pca = y_pca.squeeze(1)
     
     kmeans_model = KMeans(num_clusters, random_state=0, n_init='auto').fit(activ)
     cluster_labels = kmeans_model.predict(activ)
@@ -78,12 +72,32 @@ def plot_activation_by_cluster(activ: torch.Tensor, num_clusters: int = 5, plot:
 
 
 
-def binarise(x, thresh=0.5):
+def binarise(x, thresh=0.5, as_bool=True):
+    if as_bool:
+        return torch.where(x > thresh, True, False)
     return torch.where(x > thresh, 1.0, 0.0)
 
 
 
-def plot_concepts(hgraph, model, num_clusters=6, binarise_concepts=False):
+def plot_activation_by_binarise(activ, plot: bool = True, fig_title: str = "Activations by Binarisation"):
+
+    labels = binarise(activ, as_bool=True)
+    labels = [tuple(labels[i].tolist()) for i in range(labels.size(0))]
+    codes = set(labels)
+    mapping = {code:i for i,code in enumerate(codes)}
+    labels = np.array([mapping[code] for code in labels])
+
+    pca_model = PCA(n_components=2) # visualise in 2D
+    activ_pca = pca_model.fit_transform(activ)
+
+    if plot:
+        plot_clusters(activ_pca, labels, len(codes), fig_title)
+
+    return labels
+
+
+
+def plot_concepts(activ, labels, num_clusters=6, cluster_by_binarise=False, fig_title=None):
 
     # activations = {}
     # hook_handles = {}
@@ -101,13 +115,18 @@ def plot_concepts(hgraph, model, num_clusters=6, binarise_concepts=False):
     # activ, kmeans_model = plot_cluster_activations(activations, 'conv2', num_clusters=num_clusters)
 
 
-    with torch.no_grad():
-        out = model(hgraph)
-        
-    concepts = model.concepts.detach().cpu()
-    if binarise_concepts: concepts = binarise(concepts)
+    plot_activation_by_class(
+        activ, labels, fig_title="Activations By Class" if fig_title is None else 
+                                f"Activations By Class | {fig_title}")
+    
+    if cluster_by_binarise:
+        labels = plot_activation_by_binarise(
+            activ, fig_title="Activations By Binarisation" if fig_title is None else 
+                            f"Activations By Binarisation | {fig_title}")
+        kmeans_model = labels # assign this for return
+    else:
+        kmeans_model = plot_activation_by_cluster(
+            activ, num_clusters, fig_title="Activations By Cluster" if fig_title is None else 
+                                          f"Activations By Cluster | {fig_title}")
 
-    kmeans_model = plot_activation_by_class(concepts, hgraph.y)
-    kmeans_model = plot_activation_by_cluster(concepts, num_clusters)
-
-    return concepts, kmeans_model
+    return kmeans_model

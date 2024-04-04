@@ -88,7 +88,7 @@ class HyperGCN(nn.Module):
 
 class MyHyperGCN(nn.Module):
     
-    def __init__(self, input_dim: int, output_dim: int, hidden_dim: int, num_layers: int, symmetric_norm: bool = True, bias: bool = True, use_attention=False, dropout: float = 0.0, len_readout: bool = False):
+    def __init__(self, input_dim: int, output_dim: int, hidden_dim: int, num_layers: int, symmetric_norm: bool = True, bias: bool = True, use_attention=False, dropout: float = 0.0, len_readout: bool = False, softmax_and_scale: bool = False):
         """
         Args:
             input_dim: dimension of input features per node
@@ -96,6 +96,9 @@ class MyHyperGCN(nn.Module):
             hidden_dim: dimension of hidden features per node
             num_layers: number of layers
         """
+
+        if len_readout: 
+            assert softmax_and_scale, "LEN readout requires softmax_and_scale = True"
 
         super().__init__()
 
@@ -124,13 +127,16 @@ class MyHyperGCN(nn.Module):
         else:
             self.fc_out = nn.Linear(hidden_dim, output_dim)
 
+        self.softmax_and_scale = softmax_and_scale
+
         self.drop = nn.Dropout(p=dropout)
 
-        self.concepts = None
+        self.activ_node = None
+        self.activ_hedge = None
 
 
     
-    def forward(self, hgraph):
+    def forward(self, hgraph, save_activ=False):
         """
         Args:
             hgraph: hypergraph object (needs attributes x and incidence matrix H)
@@ -144,22 +150,30 @@ class MyHyperGCN(nn.Module):
         x = self.fc_in(x)
 
         for ind_layer,layer in enumerate(self.gcn_layers):
-            x = layer(x, H)
-            if (not self.len_readout) and (ind_layer == self.num_layers-1): self.concepts = x
+            x = layer(x, H, save_activ)
             x = torch.nn.functional.relu(x)
             x = self.drop(x)
         
+        self.activ_hedge = self.gcn_layers[-1].activ_hedge
+        if not self.softmax_and_scale: 
+            self.activ_node = self.gcn_layers[-1].activ_node
         
         if self.len_readout:
     
             x = torch.nn.functional.softmax(x, dim=-1)
             x = torch.div(x, torch.max(x, dim=-1)[0].unsqueeze(1))
-            self.concepts = x
+            if save_activ: self.activ_node = x
         
             x = self.len(x)
             x = x.squeeze(-1)
         
         else:
+
+            if self.softmax_and_scale:
+                x = torch.nn.functional.softmax(x, dim=-1)
+                x = torch.div(x, torch.max(x, dim=-1)[0].unsqueeze(1))
+                if save_activ: self.activ_node = x
+
             x = self.fc_out(x)
 
         
@@ -169,7 +183,7 @@ class MyHyperGCN(nn.Module):
 
 class HyperResidGCN(nn.Module):
     
-    def __init__(self, input_dim, output_dim, hidden_dim, num_layers, alpha, beta, dropout=0, symmetric_norm: bool = True, bias: bool = True, len_readout: bool = False):
+    def __init__(self, input_dim, output_dim, hidden_dim, num_layers, alpha, beta, dropout=0, symmetric_norm: bool = True, bias: bool = True, len_readout: bool = False, softmax_and_scale: bool = False):
         """
         Args:
             input_dim: dimension of input features per node
@@ -180,6 +194,9 @@ class HyperResidGCN(nn.Module):
 
             For now, treat alpha and beta as constant across all layers
         """
+
+        if len_readout: 
+            assert softmax_and_scale, "LEN readout requires softmax_and_scale = True"
 
         super().__init__()
 
@@ -206,12 +223,14 @@ class HyperResidGCN(nn.Module):
         else:
             self.fc_out = nn.Linear(hidden_dim, output_dim)
         
+        self.softmax_and_scale = softmax_and_scale
+        
         self.drop = nn.Dropout(p=dropout)
 
-        self.concepts = None
-    
-    
-    def forward(self, hgraph):
+        self.activ_node = None
+        self.activ_hedge = None
+
+    def forward(self, hgraph, save_activ=False):
         """
         Args:
             hgraph: hypergraph object (needs attributes x and incidence matrix H)
@@ -226,21 +245,32 @@ class HyperResidGCN(nn.Module):
         x0 = x
 
         for ind_layer,layer in enumerate(self.gcn_layers):
-            x = layer(x, H, x0)
-            if (not self.len_readout) and (ind_layer == self.num_layers-1): self.concepts = x
+            x = layer(x, H, x0, save_activ)
             x = torch.nn.functional.relu(x)
-            x = self.drop(x)        
+            x = self.drop(x)
+
+        self.activ_hedge = self.gcn_layers[-1].activ_hedge
+        if not self.softmax_and_scale: 
+            self.activ_node = self.gcn_layers[-1].activ_node 
         
         if self.len_readout:
+
+            assert self.softmax_and_scale
     
             x = torch.nn.functional.softmax(x, dim=-1)
             x = torch.div(x, torch.max(x, dim=-1)[0].unsqueeze(1))
-            self.concepts = x
+            if save_activ: self.activ_node = x
         
             x = self.len(x)
             x = x.squeeze(-1)
         
         else:
+            
+            if self.softmax_and_scale:
+                x = torch.nn.functional.softmax(x, dim=-1)
+                x = torch.div(x, torch.max(x, dim=-1)[0].unsqueeze(1))
+                if save_activ: self.activ_node = x
+            
             x = self.fc_out(x)
             
         

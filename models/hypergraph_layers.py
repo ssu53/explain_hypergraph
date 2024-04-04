@@ -32,8 +32,11 @@ class MyHypergraphConv(nn.Module):
         self.output_dim = output_dim
         self.Linear = nn.Linear(input_dim, output_dim, bias=bias) # implements W
         self.symmetric_norm = symmetric_norm
+
+        self.activ_node = None
+        self.activ_hedge = None
     
-    def forward(self, x, H):
+    def forward(self, x, H, save_activ=False):
         """
         Args:
             x: feature matrix [num_nodes, input_dim]
@@ -46,10 +49,18 @@ class MyHypergraphConv(nn.Module):
             deg_node_inv_half = torch.nan_to_num(torch.pow(torch.diag(torch.sum(H, axis=1)), -0.5), nan=0, posinf=0, neginf=0).to(torch.float32) # (D_v)^(-0.5)
             deg_edge_inv       = torch.nan_to_num(torch.pow(torch.diag(torch.sum(H, axis=0)), -1.0), nan=0, posinf=0, neginf=0).to(torch.float32) # (D_e)^(-1)
             x = deg_node_inv_half @ H @ deg_edge_inv @ H.T @ deg_node_inv_half @ x
+            if save_activ:
+                self.activ_hedge = deg_edge_inv @ H.T @ deg_node_inv_half @ x
+        
         else:
             x = H @ H.T @ x
+            if save_activ:
+                self.activ_hedge = H.T @ x
 
         x = self.Linear(x)
+
+        if save_activ:
+            self.activ_node = x
 
         return x
     
@@ -77,8 +88,11 @@ class MyHypergraphAtt(nn.Module):
         # for computing attentions i.e. node-hyperedge weights
         self.att_proj1 = nn.Linear(2*input_dim, 2*input_dim)
         self.att_proj2 = nn.Linear(2*input_dim, 1)
+
+        self.activ_node = None
+        self.activ_hedge = None
     
-    def forward(self, x, H):
+    def forward(self, x, H, save_activ=False):
         """
         Args:
             x: feature matrix [num_nodes, input_dim]
@@ -106,10 +120,19 @@ class MyHypergraphAtt(nn.Module):
             deg_node_inv_half = torch.nan_to_num(torch.pow(torch.diag(torch.sum(H, axis=1)), -0.5), nan=0, posinf=0, neginf=0).to(torch.float32) # (D_v)^(-0.5)
             deg_edge_inv      = torch.nan_to_num(torch.pow(torch.diag(torch.sum(H, axis=0)), -1.0), nan=0, posinf=0, neginf=0).to(torch.float32) # (D_e)^(-1)
             x = deg_node_inv_half @ H_att @ deg_edge_inv @ H_att.T @ deg_node_inv_half @ x
+            if save_activ:
+                self.activ_hedge = deg_edge_inv @ H_att.T @ deg_node_inv_half @ x
+        
         else:
             x = H_att @ H_att.T @ x
+            if save_activ:
+                self.activ_hedge = H_att.T @ x
+
         
         x = self.linear(x)
+
+        if save_activ:
+            self.activ_node = x
 
         return x
 
@@ -134,8 +157,11 @@ class MyHypergraphConvResid(nn.Module):
         self.alpha = alpha
         self.beta = beta
         self.symmetric_norm = symmetric_norm
+
+        self.activ_node = None
+        self.activ_hedge = None
     
-    def forward(self, x, H, x0):
+    def forward(self, x, H, x0, save_activ=False):
         """
         Args:
             x: feature matrix [num_nodes, input_dim]
@@ -148,10 +174,17 @@ class MyHypergraphConvResid(nn.Module):
             deg_node_inv_half = torch.nan_to_num(torch.pow(torch.diag(torch.sum(H, axis=1)), -0.5), nan=0, posinf=0, neginf=0).to(torch.float32) # (D_v)^(-0.5)
             deg_edge_inv       = torch.nan_to_num(torch.pow(torch.diag(torch.sum(H, axis=0)), -1.0), nan=0, posinf=0, neginf=0).to(torch.float32) # (D_e)^(-1)
             x = (1 - self.alpha) * deg_node_inv_half @ H @ deg_edge_inv @ H.T @ deg_node_inv_half @ x + self.alpha * x0
+            if save_activ:
+                self.activ_hedge = deg_edge_inv @ H.T @ deg_node_inv_half @ x
         else:
             x = (1 - self.alpha) * H @ H.T @ x + self.alpha * x0
+            if save_activ:
+                self.activ_hedge = H.T @ x
         
         x = self.beta * x + (1 - self.beta) * self.Linear(x)
+
+        if save_activ:
+            self.activ_node = x
 
         return x
 

@@ -51,7 +51,7 @@ def data_to_hnxhypergraph(data):
 
 
 
-def get_single_run(path, device=None):
+def get_single_run(path, device=None, load_best=False):
 
     with open(path / "cfg.json", "r") as f:
         cfg = json.load(f)
@@ -85,8 +85,10 @@ def get_single_run(path, device=None):
 
         hgraph = data_to_hnxhypergraph(data) 
 
-    
-    model.load_state_dict(torch.load(path / "model"))
+    if load_best:
+        model.load_state_dict(torch.load(path / "best_model"))
+    else:
+        model.load_state_dict(torch.load(path / "model"))
     model.eval()
     model.to(device)
     

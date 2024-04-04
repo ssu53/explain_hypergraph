@@ -426,7 +426,8 @@ class SetGNN(nn.Module):
 #         Now we simply use V_enc_hid=V_dec_hid=E_enc_hid=E_dec_hid
 #         However, in general this can be arbitrary.
         
-        self.concepts = None
+        self.activ_node = None
+        self.activ_hedge = None
 
 
     def reset_parameters(self):
@@ -474,6 +475,8 @@ class SetGNN(nn.Module):
                 x = F.relu(self.V2EConvs[i](x, edge_index, norm, self.aggr))
 #                 x = self.bnV2Es[i](x)
                 x = F.dropout(x, p=self.dropout, training=self.training)
+                if i == len(self.V2EConvs)-1: 
+                    self.activ_hedge = x
                 x = self.E2VConvs[i](x, reversed_edge_index, norm, self.aggr)
                 x = F.relu(x)
                 xs.append(x)
@@ -481,7 +484,7 @@ class SetGNN(nn.Module):
                 x = F.dropout(x, p=self.dropout, training=self.training)
             x = torch.stack(xs, dim=-1)
             x = self.GPRweights(x).squeeze()
-            self.concepts = x
+            self.activ_node = x
             x = self.classifier(x)
         else:
             x = F.dropout(x, p=0.2, training=self.training) # Input dropout
@@ -489,11 +492,13 @@ class SetGNN(nn.Module):
                 x = F.relu(self.V2EConvs[i](x, edge_index, norm, self.aggr))
 #                 x = self.bnV2Es[i](x)
                 x = F.dropout(x, p=self.dropout, training=self.training)
-                x = F.relu(self.E2VConvs[i](
-                    x, reversed_edge_index, norm, self.aggr))
+                if i == len(self.V2EConvs)-1:
+                    self.activ_hedge = x
+                x = self.E2VConvs[i](x, reversed_edge_index, norm, self.aggr)
+                x = F.relu(x)
 #                 x = self.bnE2Vs[i](x)
                 x = F.dropout(x, p=self.dropout, training=self.training)
-            self.concepts = x
+            self.activ_node = x
             x = self.classifier(x)
 
         return x

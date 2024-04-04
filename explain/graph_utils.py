@@ -41,25 +41,44 @@ def get_nodes_of_edges(hgraph: hnx.Hypergraph, edges: List[str]):
 
 
 
-def get_local_hypergraph(node_idx, hgraph: hnx.Hypergraph, num_expansions: int, graph_data=None) -> hnx.Hypergraph:
+def get_local_hypergraph(idx, hgraph: hnx.Hypergraph, num_expansions: int, is_hedge_concept: bool, graph_data=None) -> hnx.Hypergraph:
 
     assert isinstance(hgraph, hnx.Hypergraph)
-    if isinstance(node_idx, int) or isinstance(node_idx, np.integer): node_idx = [node_idx]
+    if isinstance(idx, int) or isinstance(idx, np.integer): idx = [idx]
 
-    neighb_nodes = set(node_idx)
-    neighb_edges = set()
-    
-    for _ in range(num_expansions):
+    if is_hedge_concept:
 
-        neighb_nodes_new = set()
+        neighb_nodes = set()
+        neighb_edges = set(["e" + "{0:0>4}".format(i) for i in idx])
 
-        for node in neighb_nodes:
-            neighb_nodes_new.update(hgraph.neighbors(node))
+        for _ in range(num_expansions):
 
-        # neighb_edges.update(hgraph.restrict_to_nodes(neighb_nodes).edges)
-        neighb_edges.update(get_edges_of_nodes(hgraph, list(neighb_nodes)))
+            neighb_edges_new = set()
 
-        neighb_nodes.update(neighb_nodes_new)
+            for edge in neighb_edges:
+                neighb_edges_new.update(hgraph.edge_neighbors(edge))
+            
+            neighb_nodes.update(get_nodes_of_edges(hgraph, list(neighb_edges)))
+
+            neighb_edges.update(neighb_edges_new)
+
+    else:
+
+        neighb_nodes = set(idx)
+        neighb_edges = set()
+        
+        for _ in range(num_expansions):
+
+            neighb_nodes_new = set()
+
+            for node in neighb_nodes:
+                neighb_nodes_new.update(hgraph.neighbors(node))
+
+            # neighb_edges.update(hgraph.restrict_to_nodes(neighb_nodes).edges)
+            neighb_edges.update(get_edges_of_nodes(hgraph, list(neighb_nodes)))
+
+            neighb_nodes.update(neighb_nodes_new)
+
 
     # make hypergraph comprising neighb_nodes and neighb_edges
     neighb_dict = {}
@@ -76,23 +95,23 @@ def get_local_hypergraph(node_idx, hgraph: hnx.Hypergraph, num_expansions: int, 
 
 
 
-def get_local_hypergraphs(node_idxs, y, hgraph, num_expansions, graph_data=None):
+def get_local_hypergraphs(idxs, y, hgraph, num_expansions, is_hedge_concept, graph_data=None):
 
     graphs = []
     color_maps = []
     labels = []
     node_labels = []
     
-    for node_idx in node_idxs:
+    for idx in idxs:
         
-        neighb_hgraph = get_local_hypergraph(node_idx, hgraph, num_expansions, graph_data)
+        neighb_hgraph = get_local_hypergraph(idx, hgraph, num_expansions, is_hedge_concept, graph_data)
         
         color_map = [] # how to plot node color into hypergraph?
         node_label = {}
         
         graphs.append(neighb_hgraph)
         color_maps.append(color_map)
-        labels.append(y[node_idx])
+        labels.append(y[idx])
         node_labels.append(node_label)
 
     return graphs, color_maps, labels, node_labels
@@ -113,7 +132,12 @@ def get_node_distances(kmeans_model, data):
 
 
 
-def plot_samples(activ, kmeans_model, y, hgraph, num_expansions, num_nodes_view=2, path=None, graph_data=None):
+def plot_samples(activ, kmeans_model, y, hgraph, num_expansions, num_nodes_view=2, path=None, is_hedge_concept=False, graph_data=None):
+
+    if is_hedge_concept:
+        assert activ.size(0) == hgraph.number_of_edges()
+    else:
+        assert activ.size(0) == hgraph.number_of_nodes()
 
     assert isinstance(kmeans_model, KMeans)
     num_clusters = kmeans_model.n_clusters
@@ -145,14 +169,14 @@ def plot_samples(activ, kmeans_model, y, hgraph, num_expansions, num_nodes_view=
             else:
                 top_indices = np.argsort(distances)[::][:view]
 
-            tg, cm, labels, node_labels = get_local_hypergraphs(top_indices, y, hgraph, num_expansions, graph_data)
+            tg, cm, labels, node_labels = get_local_hypergraphs(top_indices, y, hgraph, num_expansions, is_hedge_concept, graph_data)
             top_graphs = top_graphs + tg
             color_maps = color_maps + cm
 
         if graph_data is None:
-            for ax, new_G, node_idx, g_label in zip(ax_list, top_graphs, top_indices, labels):
+            for ax, new_G, idx, g_label in zip(ax_list, top_graphs, top_indices, labels):
                 hnx.draw(new_G, ax=ax, with_node_counts=True, with_node_labels=True)
-                ax.set_title(f"label {g_label} node {node_idx}", fontsize=14)
+                ax.set_title(f"label {g_label} {'hedge' if is_hedge_concept else 'node'} {idx}", fontsize=14)
         else:
             raise NotImplementedError
 

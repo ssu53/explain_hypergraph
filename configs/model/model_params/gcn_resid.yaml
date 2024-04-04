@@ -6,3 +6,4 @@ symmetric_norm: False
 bias: True
 dropout: 0.0
 len_readout: False
+softmax_and_scale: False

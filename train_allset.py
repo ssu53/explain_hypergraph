@@ -430,9 +430,18 @@ def save_stuff(cfg, train_stats, hgraph, model, best_model):
 
 def main():
 
-    method = "AllSetTransformer"
-    path_data = "data/standard/ones1/hgraph1.pickle"
-    save_dir = "train_results/allsettransformer"
+    # method = "AllSetTransformer"
+    method = "AllDeepSets"
+    # path_data = "data/standard/ones1/hgraph0.pickle"
+    # path_data = "data/standard_v2/hgraph0.pickle"
+    # path_data = "data/standard_v3/hgraph0.pickle"
+    path_data = "data/unperturbed_v3/hgraph0.pickle"
+    # save_dir = "train_results/allsettransformer/standard/ones1/hgraph0"
+    # save_dir = "train_results/allsettransformer/standard_v2/hgraph0"
+    # save_dir = "train_results/allsettransformer/standard_v3/hgraph0"
+    # save_dir = "train_results/allsettransformer/unperturbed_v3/hgraph0"
+    # save_dir = "train_results/allsettransformer/unperturbed_v3/hgraph0_rerun3"
+    save_dir = "train_results/alldeepsets/unperturbed_v3/hgraph0_rerun3"
 
     # Gets args, data, device
     # --------------------------------------
@@ -441,6 +450,7 @@ def main():
 
     args = get_args(method)
     args.save_datestamp = False
+    args.path_data = path_data
     args.save_dir = save_dir
 
     data = load_data(args, path_data=path_data)
