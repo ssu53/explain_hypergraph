@@ -58,7 +58,6 @@ def run_experiment(cfg):
         )
         wandb.run.name = f"{cfg.wandb.experiment_name}-size-{cfg.coeffs.size}-ent-{cfg.coeffs.ent}-class-{node_class}-node-{cfg.node_idx}"
 
-    # this is for alldeepsets only
 
     hgnn_explain_sparse(
         cfg.node_idx, 

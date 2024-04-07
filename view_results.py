@@ -14,7 +14,7 @@ from explain import plot_concepts, ActivationClassifier, plot_samples, get_local
 import models.allset
 from train import eval
 
-from explain import get_hyperedge_labels, transfer_features, hgnn_explain, hgnn_explain_sparse, show_learnt_subgraph, subgraph_selector, explainer_loss, get_human_motif
+from explain import get_hyperedge_labels, transfer_features, hgnn_explain, hgnn_explain_sparse, show_learnt_subgraph, explainer_loss, get_human_motif
 
 
 # %%
@@ -60,13 +60,15 @@ These are unperturbed, otherwise mirroring the above
 # path = Path('train_results/allsettransformer/standard_v2/hgraph0')
 # path = Path('train_results/allsettransformer/standard_v3/hgraph0')
 # path = Path('train_results/allsettransformer/unperturbed_v3/hgraph0')
-# path = Path('train_results/allsettransformer/unperturbed_v3/hgraph0')
+path = Path('train_results/allsettransformer/unperturbed_v3/hgraph0')
 
 # alldeepsets
-path = Path('train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1')
+# path = Path('train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1')
 
 
 cfg, train_stats, hgraph, model = get_single_run(path, device=torch.device("cpu"))
+hgraph.num_house_types = 1
+hgraph.num_classes = 4
 
 
 # Fetch concepts
@@ -129,10 +131,6 @@ _, _ = plot_samples(activ_node_agg, kmeans_model_node_agg, hyperedge_labels, hgr
 
 node_idx = 520
 
-# TODO: fix this hack
-hgraph.num_house_types = 1
-hgraph.num_classes = 4
-
 hgraph_local = get_local_hypergraph(idx=node_idx, hgraph=hgraph, num_expansions=3, is_hedge_concept=False)
 transfer_features(hgraph, hgraph_local, cfg)
 
@@ -143,15 +141,15 @@ hnx.draw(hgraph_local, with_node_labels=True)
 # %%
 
 # may need to tune these dynamically depending on... the size of hgraph_local?
-coeffs = {'size': 0.01, 'ent': 1.0}
+coeffs = {'size': 0.005, 'ent': 0.01}
 
 if isinstance(model, models.allset.models.SetGNN): 
     hgnn_explain_sparse(
         node_idx, 
         hgraph_local, 
         model, 
-        init_strategy="normal", 
-        num_epochs=300, 
+        init_strategy="const", 
+        num_epochs=400, 
         lr=0.01, 
         loss_pred_type="kl_div",
         print_every=25,
@@ -163,7 +161,7 @@ else:
         node_idx, 
         hgraph_local, 
         model, 
-        init_strategy="normal", 
+        init_strategy="const", 
         num_epochs=200, 
         lr=0.01, 
         loss_pred_type="kl_div",
@@ -286,6 +284,7 @@ with torch.no_grad():
 
 
 fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(12,4))
+fig.suptitle(f"Node {node_idx} | G.T. Class {hgraph.y[node_idx].item()}")
     
 hnx.draw(hgraph_local, with_node_labels=True, ax=ax[0])
 ax[0].set_title("local computational graph")

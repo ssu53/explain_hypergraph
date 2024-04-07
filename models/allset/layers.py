@@ -108,6 +108,7 @@ class PMA(MessagePassing):
 #         zeros(self.bias)
 
     def forward(self, x, edge_index: Adj,
+                norm=None,
                 size: Size = None, return_attention_weights=None):
         # type: (Union[Tensor, OptPairTensor], Tensor, Size, NoneType) -> Tensor  # noqa
         # type: (Union[Tensor, OptPairTensor], SparseTensor, Size, NoneType) -> Tensor  # noqa
@@ -145,8 +146,15 @@ class PMA(MessagePassing):
 
         # propagate_type: (x: OptPairTensor, alpha: OptPairTensor)
 #         ipdb.set_trace()
-        out = self.propagate(edge_index, x=x_V,
-                             alpha=alpha_r, aggr=self.aggr)
+        if norm is None:
+            norm = torch.ones(edge_index.size(1), device=edge_index.device)
+        out = self.propagate(
+            edge_index,
+            x=x_V,
+            alpha=alpha_r,
+            norm=norm,
+            aggr=self.aggr,
+        )
 
         alpha = self._alpha
         self._alpha = None
@@ -169,6 +177,7 @@ class PMA(MessagePassing):
             return out
 
     def message(self, x_j, alpha_j,
+                norm,
                 index, ptr,
                 size_j):
         #         ipdb.set_trace()
@@ -178,7 +187,7 @@ class PMA(MessagePassing):
             alpha = softmax(alpha, index, ptr, index.max()+1)
         self._alpha = alpha
         alpha = F.dropout(alpha, p=self.dropout, training=self.training)
-        return x_j * alpha.unsqueeze(-1)
+        return x_j * alpha.unsqueeze(-1) * norm.view(-1, 1, 1)
 
     def aggregate(self, inputs, index,
                   dim_size=None, aggr=None):
@@ -663,7 +672,7 @@ class HalfNLHconv(MessagePassing):
         """
         
         if self.attention:
-            x = self.prop(x, edge_index)
+            x = self.prop(x, edge_index, norm=norm)
         else:
             x = F.relu(self.f_enc(x))
             x = F.dropout(x, p=self.dropout, training=self.training)

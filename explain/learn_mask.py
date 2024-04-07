@@ -261,7 +261,6 @@ def hgnn_explain_sparse(
                 f"{mask_density(hgraph.norm, torch.ones_like(hgraph.norm)):.2f}",
                 np.round(logits_actual.detach().cpu().numpy(),2),
                 np.round(pred_actual.detach().cpu().numpy(),2),
-                coeffs,
             )
 
         if scheduler_fn is not None: lrs.append(scheduler.get_last_lr().pop())
