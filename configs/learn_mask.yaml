@@ -15,6 +15,7 @@ coeffs:
 
 lr: 0.01
 num_epochs: 400
+loss_pred_type: kl_div
 scheduler: None
 
 seed: 42

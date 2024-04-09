@@ -8,13 +8,12 @@ import hypernetx as hnx
 import pandas as pd
 import matplotlib.pyplot as plt 
 import seaborn as sns
+import json
+from easydict import EasyDict
 
-from train.vis_results import get_single_run
-from explain import plot_concepts, ActivationClassifier, plot_samples, get_local_hypergraph
 import models.allset
-from train import eval
-
-from explain import get_hyperedge_labels, transfer_features, hgnn_explain, hgnn_explain_sparse, show_learnt_subgraph, explainer_loss, get_human_motif
+from train import get_single_run, eval, set_seed
+from explain import plot_concepts, ActivationClassifier, plot_samples, get_local_hypergraph, get_hyperedge_labels, transfer_features, hgnn_explain, hgnn_explain_sparse, show_learnt_subgraph, explainer_loss, get_human_motif
 
 
 # %%
@@ -60,10 +59,9 @@ These are unperturbed, otherwise mirroring the above
 # path = Path('train_results/allsettransformer/standard_v2/hgraph0')
 # path = Path('train_results/allsettransformer/standard_v3/hgraph0')
 # path = Path('train_results/allsettransformer/unperturbed_v3/hgraph0')
-path = Path('train_results/allsettransformer/unperturbed_v3/hgraph0')
 
 # alldeepsets
-# path = Path('train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1')
+path = Path('train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1')
 
 
 cfg, train_stats, hgraph, model = get_single_run(path, device=torch.device("cpu"))
@@ -85,9 +83,94 @@ activ_node_agg = torch.tensor(hgraph.incidence_matrix().T @ activ_node)
 hyperedge_labels = get_hyperedge_labels(hgraph)
 
 
+# %%
+
+with open(path / 'explanation.json', 'r') as f:
+    summary = json.load(f)
+    summary = EasyDict(summary)
+
+assert  summary.config.load_fn == str(path)
+df = pd.DataFrame.from_dict(summary.summary, orient="index")
+df = df.reindex(sorted(df.columns), axis=1)  
+
+col = 'loss/binarised'
+
+kmeans_model_node = plot_concepts(activ_node, labels=df[col].tolist(), categorical_label=False, num_clusters=7, cluster_by_binarise=False, fig_title=f"Nodes by {col}")
+
+
+plt.figure(figsize=(5,5))
+plt.hist(df[col], bins=20)
+plt.title(f"distribution of {col}")
+plt.show()
+
+
+# %%
+
+from enum import Enum
+
+class House(Enum):
+    Base = 0
+    Top = 1
+    Middle = 2
+    Bottom = 3
+
+
+class HouseGranular(Enum):
+    Base_Anchor = 0
+    Base_Other = 1
+    Top = 2
+    Middle_Unanchored = 3
+    Middle_Anchored = 4
+    Bottom = 5
+
+
+
+def get_subclass_labels(hgraph):
+    # fine grained labels - this is only a hack when there are no edge perturbations
+
+    subclass_label_name = [None for _ in range(hgraph.number_of_nodes())]
+    
+    for node_idx in range(hgraph.number_of_nodes()):
+
+        node_class = hgraph.y[node_idx].item()
+
+        if node_class == House.Base.value:
+            neighb_classes = set([hgraph.y[neighb].item() for neighb in hgraph.neighbors(node_idx)])
+            if House.Middle.value in neighb_classes:
+                subclass_label_name[node_idx] = HouseGranular.Base_Anchor.name
+            else:
+                subclass_label_name[node_idx] = HouseGranular.Base_Other.name
+        elif node_class == House.Top.value:
+            subclass_label_name[node_idx] = HouseGranular.Top.name
+        elif node_class == House.Middle.value:
+            if len(hgraph.neighbors(node_idx)) == 4:
+                subclass_label_name[node_idx] = HouseGranular.Middle_Unanchored.name
+            elif len(hgraph.neighbors(node_idx)) == 5:
+                subclass_label_name[node_idx] = HouseGranular.Middle_Anchored.name
+            else:
+                raise ValueError
+        elif node_class == House.Bottom.value:
+            subclass_label_name[node_idx] = HouseGranular.Bottom.name
+        else:
+            raise ValueError
+    
+    return subclass_label_name
+    
+
+
+class_label = hgraph.y
+class_label_name = [House(c.item()).name for c in class_label]
+subclass_label_name = get_subclass_labels(hgraph)
+subclass_label = torch.tensor([getattr(HouseGranular, c).value for c in subclass_label_name])
+
+
+# %%
+
 # Plot node concepts by cluster
 
-kmeans_model_node = plot_concepts(activ_node, labels=hgraph.y, num_clusters=7, cluster_by_binarise=False, fig_title="Nodes")
+kmeans_model_node = plot_concepts(activ_node, labels=subclass_label_name, num_clusters=7, cluster_by_binarise=False, fig_title="Nodes (Subclassed)")
+
+kmeans_model_node = plot_concepts(activ_node, labels=class_label_name, num_clusters=7, cluster_by_binarise=False, fig_title="Nodes")
 
 kmeans_model_hedge = plot_concepts(activ_hedge, labels=hyperedge_labels, num_clusters=7, cluster_by_binarise=False, fig_title="Hyperedges")
 
@@ -99,9 +182,16 @@ kmeans_model_node_agg = plot_concepts(activ_node_agg, labels=hyperedge_labels, n
 
 ac = ActivationClassifier(
     activ_node, kmeans_model_node, "decision_tree",
-    hgraph.x.cpu().reshape(-1,1), hgraph.y.cpu(), 
+    hgraph.x.cpu().reshape(-1,1), class_label, 
     hgraph.train_mask.cpu(), hgraph.val_mask.cpu())
-print(f"Concept completeness: {ac.get_classifier_accuracy():.3f}")
+print(f"Concept completeness on classes: {ac.get_classifier_accuracy():.3f}")
+
+
+ac_subclass = ActivationClassifier(
+    activ_node, kmeans_model_node, "decision_tree",
+    hgraph.x.cpu().reshape(-1,1), subclass_label, 
+    hgraph.train_mask.cpu(), hgraph.val_mask.cpu())
+print(f"Concept completeness on subclasses: {ac_subclass.get_classifier_accuracy():.3f}")
 
 
 print(f"final train acc {eval(hgraph, model, hgraph.train_mask):.3f} | final val acc {eval(hgraph, model, hgraph.val_mask):.3f}")
@@ -130,6 +220,8 @@ _, _ = plot_samples(activ_node_agg, kmeans_model_node_agg, hyperedge_labels, hgr
 # Select node to explain
 
 node_idx = 520
+
+set_seed(42)
 
 hgraph_local = get_local_hypergraph(idx=node_idx, hgraph=hgraph, num_expansions=3, is_hedge_concept=False)
 transfer_features(hgraph, hgraph_local, cfg)

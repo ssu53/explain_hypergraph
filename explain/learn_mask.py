@@ -468,8 +468,16 @@ def get_human_motif(node_idx, hgraph, cfg):
     # ground truth label
     label = hgraph.y[node_idx].item()
 
-    if label == 0:
-        raise Exception
+    if label == 0: 
+        # choose the motif to be the single node and all of its containing hyperedges
+        # this seems to tend to be classified as class 0
+        edges = get_edges_of_nodes(hgraph, [node_idx])
+        hgraph_selected = subgraph_selector(
+            hgraph, 
+            {edge: [node_idx] for edge in edges},
+            cfg,
+        )
+        return hgraph_selected
     if label == 1:
         motif_nodes = [node_idx, node_idx+1, node_idx+2, node_idx+3, node_idx+4]
     if label == 2:
