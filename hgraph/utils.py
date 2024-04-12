@@ -5,6 +5,11 @@ from sklearn.model_selection import train_test_split
 
 
 
+def EDGE_IDX2NAME(edge_idx: int):
+    return f"e{edge_idx:04}"
+
+
+
 def incidence_matrix_to_edge_index(H):
 
     nodes, edges = torch.where(H > 0)
@@ -74,7 +79,7 @@ def hgraph_to_dict(hgraph):
         test_mask = hgraph.test_mask,
         x = hgraph.x,
         y = hgraph.y,
-        num_house_types = hgraph.num_house_types,
+        num_house_types = hgraph.num_house_types if hasattr(hgraph, 'num_house_types') else None,
         num_classes = hgraph.num_classes,
         H = hgraph.H,
         edge_index = hgraph.edge_index,

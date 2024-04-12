@@ -1,0 +1,12 @@
+name: treegrid
+
+base: tree
+motif: grid
+depth: 8
+num_motifs: 80
+num_random_edges: 0
+deg_random_edges: 2
+
+features: ones
+
+seed: 42

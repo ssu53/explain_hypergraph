@@ -36,8 +36,8 @@ def transfer_features(hgraph, sub_hgraph, cfg):
     sub_hgraph.test_mask = hgraph.test_mask[node_idx]
     sub_hgraph.x = hgraph.x[node_idx]
     sub_hgraph.y = hgraph.y[node_idx]
-    sub_hgraph.num_house_types = hgraph.num_house_types
-    sub_hgraph.num_classes = hgraph.num_classes
+    sub_hgraph.num_house_types = hgraph.num_house_types if hasattr(hgraph, 'num_house_types') else None
+    sub_hgraph.num_classes = hgraph.num_classes if hasattr(hgraph, 'num_classes') else None
 
     sub_hgraph.H = torch.tensor(sub_hgraph.incidence_matrix().toarray(), dtype=torch.float32)
     sub_hgraph.H_unmasked = torch.tensor(sub_hgraph.incidence_matrix().toarray(), dtype=torch.float32)
@@ -458,7 +458,122 @@ def subgraph_selector(hgraph, incidence_dict, cfg):
 
 
 
-def get_human_motif(node_idx, hgraph, cfg):
+def get_human_motif(node_idx, hgraph, cfg, motif_type):
+
+    if motif_type == 'house':
+        hgraph_selected = get_human_motif_house(node_idx, hgraph, cfg)
+    elif motif_type == 'cycle':
+        hgraph_selected = get_human_motif_cycle(node_idx, hgraph, cfg)
+    elif motif_type == 'grid':
+        hgraph_selected = get_human_motif_grid(node_idx, hgraph, cfg)
+    else:
+        raise NotImplementedError
+    
+    return hgraph_selected
+
+
+
+def get_human_motif_grid(node_idx, hgraph, cfg):
+    """
+    hacky
+    assuming depth 8 base binary tree
+    doesn't deal with added edge perturbations
+    """
+
+    # ground truth label
+    label = hgraph.y[node_idx].item()
+
+    if label == 0:
+        edges = get_edges_of_nodes(hgraph, [node_idx])
+        hgraph_selected = subgraph_selector(
+            hgraph, 
+            {edge: [node_idx] for edge in edges},
+            cfg,
+        )
+    
+    if label == 1:
+
+        base_tree_depth = 8
+        base_num_nodes = 2 ** base_tree_depth - 1
+        motif_num_nodes = 9
+        
+        node_idx_start = ((node_idx - base_num_nodes) // motif_num_nodes) * motif_num_nodes + base_num_nodes
+        node_idx_end = node_idx_start + motif_num_nodes - 1
+
+        motif_nodes = list(range(node_idx_start, node_idx_end))
+        print(motif_nodes)
+
+        # get minimal hyperedges that contain it
+        motif_edges = get_edges_of_nodes(hgraph, motif_nodes)
+        print(motif_edges)
+
+        # get minimal incidence dictionary containning those nodes and hyperedges
+        select_incidence_dict = {edge: hgraph.incidence_dict[edge] for edge in motif_edges}
+        print(select_incidence_dict)
+
+        # get rid of the anchoring edge
+        select_incidence_dict = {k:v for k,v in select_incidence_dict.items() if len(v) == 3}
+
+        hgraph_selected = subgraph_selector(
+            hgraph, 
+            select_incidence_dict,
+            cfg,
+        )
+    
+    return hgraph_selected
+
+
+
+def get_human_motif_cycle(node_idx, hgraph, cfg):
+    """
+    hacky
+    assuming depth 8 base binary tree
+    doesn't deal with added edge perturbations
+    """
+
+    # ground truth label
+    label = hgraph.y[node_idx].item()
+
+    if label == 0:
+        edges = get_edges_of_nodes(hgraph, [node_idx])
+        hgraph_selected = subgraph_selector(
+            hgraph, 
+            {edge: [node_idx] for edge in edges},
+            cfg,
+        )
+
+    if label == 1:
+
+        base_tree_depth = 8
+        base_num_nodes = 2 ** base_tree_depth - 1
+        motif_num_nodes = 6
+
+        node_idx_start = ((node_idx - base_num_nodes) // motif_num_nodes) * motif_num_nodes + base_num_nodes
+        node_idx_end = node_idx_start + motif_num_nodes - 1
+
+        motif_nodes = list(range(node_idx_start, node_idx_end))
+
+        # get minimal hyperedges that contain it
+        motif_edges = get_edges_of_nodes(hgraph, motif_nodes)
+
+        # get minimal incidence dictionary containning those nodes and hyperedges
+        select_incidence_dict = {edge: hgraph.incidence_dict[edge] for edge in motif_edges}
+
+        # get rid of the anchoring edge
+        select_incidence_dict = {k:v for k,v in select_incidence_dict.items() if len(v) == 3}
+
+        hgraph_selected = subgraph_selector(
+            hgraph, 
+            select_incidence_dict,
+            cfg,
+        )
+    
+    return hgraph_selected
+
+
+
+
+def get_human_motif_house(node_idx, hgraph, cfg):
     """
     hacky
     node indexes must be ordered such that all the 0 nodes come first, then house motifs of form 1 2 2 3 3

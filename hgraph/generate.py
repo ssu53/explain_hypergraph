@@ -1,10 +1,11 @@
+import numpy as np
 import torch
 import hypernetx as hnx
 
 from .random_hgraph import get_trivial_features, get_multiclass_normal_features
 from .load_coraca import get_coraca_hypergraph
-from .random_hgraph import generate_random_hypergraph, generate_random_uniform_hypergraph
-from .motif import unify_labels, attach_houses_to_incidence_dict, add_random_edges_to_incidence_dict
+from .random_hgraph import generate_random_hypergraph, generate_random_uniform_hypergraph, generate_hypertrio_tree
+from .motif import unify_labels, attach_houses_to_incidence_dict, add_random_edges_to_incidence_dict, attach_motifs_to_incidence_dict, Cycle, Grid
 from .utils import incidence_matrix_to_edge_index, load_hgraph, get_split_mask
 
 
@@ -22,7 +23,7 @@ def make_random_base_graph(cfg):
 
 
 
-def decorate_and_perturb(cfg, h_base):
+def decorate_and_perturb(cfg, h_base: hnx.Hypergraph):
 
     # anchor_nodes = torch.randint(low=0, high=h_base.number_of_nodes(), size=(num_houses,)).tolist()
     anchor_nodes = range(cfg.num_houses)
@@ -45,6 +46,25 @@ def decorate_and_perturb(cfg, h_base):
     hgraph = hnx.Hypergraph(incdict)
 
     return hgraph, labels_strc, labels_type
+
+
+
+def populate_attributes_simple(cfg, hgraph: hnx.Hypergraph, labels: torch.Tensor):
+
+    if cfg.features in ["zeros", "ones", "randn"]:
+        hgraph.x = get_trivial_features(labels, feature_type=cfg.features)
+    else:
+        raise NotImplemented
+    
+    hgraph.y = labels
+    hgraph.H = torch.tensor(hgraph.incidence_matrix().toarray())
+    hgraph.edge_index = incidence_matrix_to_edge_index(hgraph.H)
+
+    train_mask, val_mask, test_mask = get_split_mask(n=hgraph.number_of_nodes(), stratify=hgraph.y, split=[0.8, 0.2, 0.0], seed=3)
+    hgraph.train_mask = train_mask
+    hgraph.val_mask = val_mask
+    hgraph.test_mask = test_mask
+    hgraph.num_classes = len(set(labels.tolist()))
 
 
 
@@ -85,6 +105,89 @@ def make_random_house(cfg):
     return hgraph
 
 
+def make_tree_cycle(cfg):
+    
+    h_base = generate_hypertrio_tree(depth=cfg.depth)
+    assert h_base.number_of_nodes() == 2 ** cfg.depth - 1
+
+    incidence_dict = h_base.incidence_dict
+    labels = {k: Cycle.Base.value for k in h_base.nodes()}
+    node_anchors = list(np.random.choice(h_base.number_of_nodes(), size=cfg.num_motifs))
+
+    attach_motifs_to_incidence_dict(
+        incidence_dict,
+        labels,
+        motif='cycle',
+        node_anchors=node_anchors,
+        num_nodes=h_base.number_of_nodes(),
+        num_edges=h_base.number_of_edges(),
+    )
+
+    num_nodes = len(set([node for lst in incidence_dict.values() for node in lst]))
+    num_edges = len(incidence_dict)
+    assert num_nodes == h_base.number_of_nodes() + 6 * cfg.num_motifs
+    assert num_edges == h_base.number_of_edges() + 4 * cfg.num_motifs
+
+    add_random_edges_to_incidence_dict(
+        cfg.num_random_edges,
+        incidence_dict,
+        num_nodes,
+        num_edges,
+        cfg.deg_random_edges,
+    )
+
+    hgraph = hnx.Hypergraph(incidence_dict)
+    labels = dict(sorted(labels.items()))
+    labels = torch.tensor(list(labels.values()))
+
+    print(f"{h_base.number_of_nodes()=}, {h_base.number_of_edges()=}")
+    print(f"{hgraph.number_of_nodes()=}, {hgraph.number_of_edges()=}")
+
+    return hgraph, labels
+
+
+
+def make_tree_grid(cfg):
+    
+    h_base = generate_hypertrio_tree(depth=cfg.depth)
+    assert h_base.number_of_nodes() == 2 ** cfg.depth - 1
+
+    incidence_dict = h_base.incidence_dict
+    labels = {k: Grid.Base.value for k in h_base.nodes()}
+    node_anchors = list(np.random.choice(h_base.number_of_nodes(), size=cfg.num_motifs))
+
+    attach_motifs_to_incidence_dict(
+        incidence_dict,
+        labels,
+        motif='grid',
+        node_anchors=node_anchors,
+        num_nodes=h_base.number_of_nodes(),
+        num_edges=h_base.number_of_edges(),
+    )
+
+    num_nodes = len(set([node for lst in incidence_dict.values() for node in lst]))
+    num_edges = len(incidence_dict)
+    assert num_nodes == h_base.number_of_nodes() + 9 * cfg.num_motifs
+    assert num_edges == h_base.number_of_edges() + 7 * cfg.num_motifs
+
+    add_random_edges_to_incidence_dict(
+        cfg.num_random_edges,
+        incidence_dict,
+        num_nodes,
+        num_edges,
+        cfg.deg_random_edges,
+    )
+
+    hgraph = hnx.Hypergraph(incidence_dict)
+    labels = dict(sorted(labels.items()))
+    labels = torch.tensor(list(labels.values()))
+
+    print(f"{h_base.number_of_nodes()=}, {h_base.number_of_edges()=}")
+    print(f"{hgraph.number_of_nodes()=}, {hgraph.number_of_edges()=}")
+
+    return hgraph, labels
+
+
 
 def make_hgraph(cfg):
 
@@ -97,9 +200,37 @@ def make_hgraph(cfg):
         hgraph = get_coraca_hypergraph(split=[0.5, 0.25, 0.25], split_seed=cfg.split_seed)
     elif cfg.base == "random":
         hgraph = make_random_house(cfg)
-    elif cfg.name == "random_unif":
+    elif cfg.base == "random_unif":
         hgraph = make_random_house(cfg)
+    elif cfg.base == 'tree' and cfg.motif == 'cycle':
+        hgraph, labels = make_tree_cycle(cfg)
+        populate_attributes_simple(cfg, hgraph, labels)
+    elif cfg.base == 'tree' and cfg.motif == 'grid':
+        hgraph, labels = make_tree_grid(cfg)
+        populate_attributes_simple(cfg, hgraph, labels)
     else:
         raise NotImplementedError
     
     return hgraph
+
+
+if __name__ == "__main__":
+
+    from easydict import EasyDict
+
+    cfg = EasyDict(
+        base = 'tree',
+        motif = 'grid',
+        depth = 5,
+        num_motifs = 4,
+        num_random_edges = 0,
+        deg_random_edges = 2,
+    )
+
+    print(cfg)
+
+    h, h_labels = make_hgraph(cfg)
+    print(h.shape)
+    print(h.incidence_dict)
+    print(h_labels)
+    hnx.draw(h)

@@ -2,8 +2,12 @@ import numpy as np
 import random
 import torch
 
+from collections import deque 
+
 import hypernetx as hnx
 from networkx.algorithms.bipartite import gnmk_random_graph
+from .utils import EDGE_IDX2NAME
+
 
 
 def generate_random_uniform_hypergraph(num_nodes, num_edges, k):
@@ -27,7 +31,7 @@ def generate_random_uniform_hypergraph(num_nodes, num_edges, k):
             H[node,i] = 1
     
     node_names = np.cumsum(np.any(H, axis=1)) - 1 # 0-index the nodes that will remain in Hypergraph (i.e. non-isolated nodes)
-    edge_names = [f"e{edge:04}" for edge in range(len(edges))]
+    edge_names = [EDGE_IDX2NAME(edge) for edge in range(len(edges))]
     
     hgraph = hnx.Hypergraph.from_incidence_matrix(H, node_names, edge_names)
 
@@ -47,7 +51,7 @@ def generate_random_hypergraph(num_nodes, num_edges):
     H = hgraph.incidence_matrix().toarray()
     num_nodes, num_edges = H.shape
     node_names = range(num_nodes)
-    edge_names = [f"e{edge:04}" for edge in range(num_edges)]
+    edge_names = [EDGE_IDX2NAME(edge) for edge in range(num_edges)]
     hgraph = hnx.Hypergraph.from_incidence_matrix(H, node_names, edge_names)
 
     return hgraph
@@ -83,6 +87,38 @@ def get_multiclass_normal_features(labels, num_classes: int, dim_feat: int = 16,
     features = torch.normal(mean=mu, std=sigma).to(torch.float32)
 
     return features
+
+
+
+def generate_hypertrio_tree(depth: int = 8):
+
+    assert depth > 1
+
+    incidence_dict = {}
+
+    leaf_nodes = deque([])
+    leaf_nodes.append(0)
+
+    num_nodes = 1
+    num_edges = 0
+
+    for _ in range(depth-1):
+        leaf_nodes_new = deque([])
+        while len(leaf_nodes) > 0:
+            parent = leaf_nodes.popleft()
+            child1 = num_nodes
+            child2 = num_nodes + 1
+            edge = num_edges
+            incidence_dict[f"e{edge:04}"] = [parent, child1, child2]
+            leaf_nodes_new.append(child1)
+            leaf_nodes_new.append(child2)
+            num_nodes += 2
+            num_edges += 1
+        leaf_nodes = leaf_nodes_new
+    
+    hgraph = hnx.Hypergraph(incidence_dict)
+
+    return hgraph
 
 
 

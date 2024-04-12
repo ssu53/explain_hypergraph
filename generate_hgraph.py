@@ -6,7 +6,7 @@ from pathlib import Path
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from hgraph.generate import make_hgraph
-from hgraph.utils import hgraph_to_dict
+from hgraph import hgraph_to_dict
 
 
 
