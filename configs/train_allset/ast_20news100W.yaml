@@ -1,0 +1,49 @@
+name: allsettransformer_20newsW100
+
+# from https://github.com/jianhao2016/AllSet/blob/main/src/run_AllSetTransformer.sh
+method: 'AllSetTransformer'
+All_num_layers: 1
+MLP_num_layers: 2
+heads: 8
+Classifier_num_layers: 1
+MLP_hidden: 256
+Classifier_hidden: 256
+wd: 0.0
+epochs: 500
+cuda: 0
+lr: 0.001
+
+# from https://github.com/jianhao2016/AllSet/blob/main/src/train.py
+alpha_softmax: True
+display_step: 50
+PMA: True,
+GPR: False
+add_self_loop: True
+exclude_self: False
+normtype: 'all_one'
+train_prop: 0.5
+valid_prop: 0.25
+LearnMask: False
+dropout: 0.5
+aggregate: 'mean'
+normalization: 'ln'
+deepset_input_norm: False
+
+runs: 1
+
+path_data: '20newsW100'
+save_dir: 'train_results/20newsW100/allsettransformer/run0'
+
+seed: 0
+save_datestamp: False
+
+
+defaults:  
+  - _self_  
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled  
+
+hydra:  
+  output_subdir: null  
+  run:  
+    dir: .

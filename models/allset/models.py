@@ -263,6 +263,8 @@ class HCHA(nn.Module):
         self.dropout = args.dropout  # Note that default is 0.6
         self.symdegnorm = args.HCHA_symdegnorm
         self.alpha_softmax = args.alpha_softmax
+        assert args.HCHA_symdegnorm in [None, True, False], args.HCHA_symdegnorm
+        assert args.alpha_softmax in [None, True, False], args.alpha_softmax
 
 #         Note that add dropout to attention is default in the original paper
         self.convs = nn.ModuleList()

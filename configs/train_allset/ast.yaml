@@ -1,0 +1,52 @@
+name: allsettransformer_synthetic
+
+method: 'AllSetTransformer'
+add_self_loop: False
+exclude_self: False
+normtype: 'all_one'
+runs: 1
+train_prop: 0.8
+valid_prop: 0.1
+LearnMask: False
+All_num_layers: 3
+dropout: 0.0
+aggregate: 'add'
+normalization: 'ln'
+deepset_input_norm: False
+GPR: False
+MLP_hidden: 16
+MLP_num_layers: 2
+heads: 1
+PMA: True
+alpha_softmax: False # do not compute softmax over attentions, effectively collapsing to a mean
+Classifier_hidden: 16
+Classifier_num_layers: 2
+cuda: 0
+lr: 0.001
+epochs: 500
+display_step: 50
+wd: 0.0
+
+
+path_data: 'data/unperturbed_v3/hgraph0.pickle'
+# path_data: 'data/treecycle_v0/hgraph0.pickle'
+# path_data: 'data/treegrid_v0/hgraph0.pickle'
+
+save_dir: 'train_results/allsettransformer/unperturbed_v3/hgraph_rerun5'
+# save_dir: 'train_results/treecycle_v0/allsettransformer/hgraph0'
+# save_dir: 'train_results/treegrid_v0/allsettransformer/hgraph0'
+
+
+seed: 0
+save_datestamp: False
+
+
+defaults:  
+  - _self_  
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled  
+
+hydra:  
+  output_subdir: null  
+  run:  
+    dir: .

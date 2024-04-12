@@ -6,154 +6,40 @@ import scipy.sparse as sp
 
 from models.allset import *
 
-from train import train_eval_loop, eval
+from train import train_eval_loop, eval, set_seed
 from hgraph.utils import load_hgraph
 from torch_geometric.data import Data
 
+import hydra
+from omegaconf import DictConfig
 from easydict import EasyDict
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
 import json
 
-# %%
-        
-
-def get_args_AllDeepSets():
-
-    args = EasyDict(
-        method = "AllDeepSets",
-        add_self_loop = False,
-        exclude_self = False,
-        normtype = "all_one",
-        runs = 1,
-        train_prop = 0.8,
-        valid_prop = 0.1,
-        LearnMask = False,
-        All_num_layers = 3,
-        dropout = 0.0,
-        aggregate = "add",
-        normalization = "ln",
-        deepset_input_norm = False,
-        GPR = False,
-        MLP_hidden = 16,
-        MLP_num_layers = 2,
-        heads = 1,
-        PMA = False, # this will get set to False for AllDeepSets anyway
-        alpha_softmax = None, # not used since self.PMA = False
-        Classifier_hidden = 16,
-        Classifier_num_layers = 2,
-        cuda = 0,
-        lr = 0.001,
-        epochs = 500,
-        display_step = 50,
-        wd = 0.0,
-    )
-
-    return args     
 
 
+ALLSET_EXISTING_DATASETS = [
+    '20newsW100',
+    'ModelNet40',
+    'zoo',
+    'NTU2012',
+    'Mushroom',
+    'coauthor_cora',
+    'coauthor_dblp',
+    'yelp',
+    'amazon-reviews',
+    'walmart-trips',
+    'house-committees',
+    'walmart-trips-100',
+    'house-committees-100',
+    'cora',
+    'citeseer',
+    'pubmed',
+]
 
-def get_args_AllSetTransformer():
-
-    args = EasyDict(
-        method = "AllSetTransformer",
-        add_self_loop = False,
-        exclude_self = False,
-        normtype = "all_one",
-        runs = 1,
-        train_prop = 0.8,
-        valid_prop = 0.1,
-        LearnMask = False,
-        All_num_layers = 3,
-        dropout = 0.0,
-        aggregate = "add",
-        normalization = "ln",
-        deepset_input_norm = False,
-        GPR = False,
-        MLP_hidden = 16,
-        MLP_num_layers = 2,
-        heads = 1,
-        PMA = True,
-        alpha_softmax = False, # do not compute softmax over attentions, effectively collapsing to a mean
-        Classifier_hidden = 16,
-        Classifier_num_layers = 2,
-        cuda = 0,
-        lr = 0.001,
-        epochs = 500,
-        display_step = 50,
-        wd = 0.0,
-    )
-
-    return args
-
-
-
-def get_args_HGNN():
-    
-    args = EasyDict(
-        method = "HGNN",
-        add_self_loop = False,
-        runs = 1,
-        train_prop = 0.8,
-        valid_prop = 0.1,
-        All_num_layers = 3,
-        dropout = 0.0,
-        MLP_hidden = 16,
-        HCHA_symdegnorm = None,
-        alpha_softmax = None, # not needed since running HCHA with use_attention = False
-        cuda = 0,
-        lr = 0.001,
-        epochs = 2000,
-        display_step = 100,
-        wd = 0.0,
-    )
-
-    return args
-
-
-
-def get_args_HCHA():
-
-    args = EasyDict(
-        method = "HCHA",
-        add_self_loop = False,
-        runs = 1,
-        train_prop = 0.8,
-        valid_prop = 0.1,
-        All_num_layers = 3,
-        dropout = 0.0,
-        MLP_hidden = 16,
-        HCHA_symdegnorm = None,
-        alpha_softmax = False,
-        cuda = 0,
-        lr = 0.001,
-        epochs = 2000,
-        display_step = 100,
-        wd = 0.0,
-    )
-
-    return args
-
-
-
-def get_args(method):
-
-    if method == 'AllDeepSets':
-        return get_args_AllDeepSets()
-    
-    if method == "AllSetTransformer":
-        return get_args_AllSetTransformer()
-
-    if method == "HGNN":
-        return get_args_HGNN()
-    
-    if method == "HCHA":
-        return get_args_HCHA()
-    
-    raise NotImplementedError
-
-
+# %% 
 
 def further_process_data(data, args):
     """
@@ -235,29 +121,31 @@ def further_process_data(data, args):
 
 
 
-def load_data(
-        args,
-        load_allset_data = False,
-        path_data = "data/standard/ones1/hgraph1.pickle",
-    ):
-
+def load_data(args):
     
-    if load_allset_data:
+    if args.path_data in ALLSET_EXISTING_DATASETS:
         """
         Refactored from Allset
         https://github.com/jianhao2016/AllSet/blob/main/src/train.py
         """
-        
-        assert path_data is None, "Igoring data path, loading Allset's coauthor_cora"
-        
-        args.dname = "coauthor_cora"
-        args.p2raw = "data/AllSet_all_raw_data/coauthorship/"
+                
+        dname = args.path_data
+
+        if dname in ['cora', 'citeseer','pubmed']:
+            p2raw = 'data/AllSet_all_raw_data/cocitation/'
+        elif dname in ['coauthor_cora', 'coauthor_dblp']:
+            p2raw = 'data/AllSet_all_raw_data/coauthorship/'
+        elif dname in ['yelp']:
+            p2raw = 'data/AllSet_all_raw_data/yelp/'
+        else:
+            p2raw = 'data/AllSet_all_raw_data/'
 
 
         dataset_allset = dataset_Hypergraph(
-            name=args.dname,
-            root = 'data/pyg_data/hypergraph_dataset_updated/',
-            p2raw=args.p2raw)
+            name=dname,
+            root='data/pyg_data/hypergraph_dataset_updated/',
+            p2raw=p2raw,
+        )
 
         data = dataset_allset.data
 
@@ -281,7 +169,7 @@ def load_data(
 
 
         # Load example synthetic data hgraph
-        hgraph = load_hgraph(path_data)
+        hgraph = load_hgraph(args.path_data)
 
         args.num_features = hgraph.x.shape[1]
         args.num_classes = hgraph.num_classes
@@ -428,40 +316,29 @@ def save_stuff(cfg, train_stats, hgraph, model, best_model):
 
 # %%
 
-def main():
-
-    # method = "AllSetTransformer"
-    method = "AllDeepSets"
-    # path_data = "data/standard/ones1/hgraph0.pickle"
-    # path_data = "data/standard_v2/hgraph0.pickle"
-    # path_data = "data/standard_v3/hgraph0.pickle"
-    path_data = "data/unperturbed_v3/hgraph0.pickle"
-    # save_dir = "train_results/allsettransformer/standard/ones1/hgraph0"
-    # save_dir = "train_results/allsettransformer/standard_v2/hgraph0"
-    # save_dir = "train_results/allsettransformer/standard_v3/hgraph0"
-    # save_dir = "train_results/allsettransformer/unperturbed_v3/hgraph0"
-    # save_dir = "train_results/allsettransformer/unperturbed_v3/hgraph0_rerun3"
-    save_dir = "train_results/alldeepsets/unperturbed_v3/hgraph0_rerun3"
+@hydra.main(version_base=None, config_path="configs/train_allset", config_name="ast")
+def main(cfg : DictConfig) -> None:
 
     # Gets args, data, device
     # --------------------------------------
     
-    print(f"Running {method}...")
+    cfg = EasyDict(cfg)
+    print(cfg)
 
-    args = get_args(method)
-    args.save_datestamp = False
-    args.path_data = path_data
-    args.save_dir = save_dir
+    data = load_data(cfg)
 
-    data = load_data(args, path_data=path_data)
+    device = torch.device('cuda:'+str(cfg.cuda) if torch.cuda.is_available() else 'cpu')
 
-    device = torch.device('cuda:'+str(args.cuda) if torch.cuda.is_available() else 'cpu')
+
+    # Set seed
+    # --------------------------------------
+    set_seed(cfg.seed) # not effective
 
 
     # Get splits
     # --------------------------------------
 
-    use_own_splits = True
+    use_own_splits = not cfg.path_data in ALLSET_EXISTING_DATASETS
 
     if use_own_splits:
 
@@ -477,9 +354,9 @@ def main():
         https://github.com/jianhao2016/AllSet/blob/main/src/train.py
         """
         split_idx_lst = []
-        for run in range(args.runs):
+        for run in range(cfg.runs):
             split_idx = rand_train_test_idx(
-                data.y, train_prop=args.train_prop, valid_prop=args.valid_prop)
+                data.y, train_prop=cfg.train_prop, valid_prop=cfg.valid_prop)
             split_idx_lst.append(split_idx)
 
         # Just train with run 0 of the split
@@ -489,11 +366,19 @@ def main():
         val_mask = split_idx['valid'].to(device)
         test_mask = split_idx['test'].to(device)
 
+        # load the splits into the hgraph data
+        data.train_mask = torch.zeros(data.n_x, dtype=bool)
+        data.val_mask = torch.zeros(data.n_x, dtype=bool)
+        data.test_mask = torch.zeros(data.n_x, dtype=bool)
+        data.train_mask[train_mask] = True
+        data.val_mask[val_mask] = True
+        data.test_mask[test_mask] = True
+
 
     # Load model
     # --------------------------------------
     
-    model = parse_method(args, data)
+    model = parse_method(cfg, data)
     model.reset_parameters()
 
     num_params = count_parameters(model)
@@ -512,10 +397,10 @@ def main():
         train_mask=train_mask,
         val_mask=val_mask,
         test_mask=test_mask,
-        lr=args.lr,
-        num_epochs=args.epochs,
+        lr=cfg.lr,
+        num_epochs=cfg.epochs,
         contr_lambda=0.0,
-        printevery=args.display_step,
+        printevery=cfg.display_step,
         save_best=True,
     )
 
@@ -535,7 +420,8 @@ def main():
     # Save stuff
     # --------------------------------------
     
-    save_stuff(args, train_stats, data, model, best_model)
+    print(f"Saving to {cfg.save_dir}")
+    save_stuff(cfg, train_stats, data, model, best_model)
 
 
 

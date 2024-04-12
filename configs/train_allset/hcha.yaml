@@ -1,0 +1,34 @@
+name: hcha
+
+method: 'HCHA'
+add_self_loop: False
+runs: 1
+train_prop: 0.8
+valid_prop: 0.1
+All_num_layers: 3
+dropout: 0.0
+MLP_hidden: 16
+HCHA_symdegnorm: null
+alpha_softmax: False
+cuda: 0
+lr: 0.001
+epochs: 2000
+display_step: 100
+wd: 0.0
+
+path_data: 'data/unperturbed_v3/hgraph0.pickle'
+save_dir: 'train_results/hcha/unperturbed_v3/hgraph0'
+
+seed: 0
+save_datestamp: False
+
+
+defaults:  
+  - _self_  
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled  
+
+hydra:  
+  output_subdir: null  
+  run:  
+    dir: .
