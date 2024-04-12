@@ -1,0 +1,29 @@
+name: learn_mask_zoo
+
+load_fn: 'train_results/zoo/allsettransformer/run1'
+load_best: False
+
+coeffs:
+  size: 0.0005
+  ent: 0.01
+
+num_expansions: 1
+lr: 0.01
+num_epochs: 800
+loss_pred_type: kl_div
+scheduler: None
+
+seed: 42
+
+log_wandb: False
+
+defaults:  
+  - _self_  
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled  
+
+hydra:  
+  output_subdir: null  
+  run:  
+    dir: .
+  

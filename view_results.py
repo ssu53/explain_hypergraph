@@ -61,12 +61,29 @@ These are unperturbed, otherwise mirroring the above
 # path = Path('train_results/allsettransformer/unperturbed_v3/hgraph0')
 
 # alldeepsets
-path = Path('train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1')
+# path = Path('train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1')
 
+# treecycle
+# motif_type = 'cycle'
+# path = Path('train_results/treecycle_v0/allsettransformer/hgraph0')
+# load_best = False
 
-cfg, train_stats, hgraph, model = get_single_run(path, device=torch.device("cpu"))
-hgraph.num_house_types = 1
-hgraph.num_classes = 4
+# treegrid
+motif_type = 'grid'
+path = Path('train_results/treegrid_v0/allsettransformer/hgraph0')
+load_best = True
+
+# zoo
+# path = Path('train_results/zoo/allsettransformer/run1')
+# load_best = False
+
+cfg, train_stats, hgraph, model = get_single_run(path, device=torch.device("cpu"), load_best=load_best)
+# hgraph.num_house_types = 1
+# hgraph.num_classes = 4
+# hgraph.num_classes = 2
+
+print(cfg)
+
 
 
 # Fetch concepts
@@ -106,25 +123,6 @@ plt.show()
 
 # %%
 
-from enum import Enum
-
-class House(Enum):
-    Base = 0
-    Top = 1
-    Middle = 2
-    Bottom = 3
-
-
-class HouseGranular(Enum):
-    Base_Anchor = 0
-    Base_Other = 1
-    Top = 2
-    Middle_Unanchored = 3
-    Middle_Anchored = 4
-    Bottom = 5
-
-
-
 def get_subclass_labels(hgraph):
     # fine grained labels - this is only a hack when there are no edge perturbations
 
@@ -157,12 +155,27 @@ def get_subclass_labels(hgraph):
     return subclass_label_name
     
 
+if motif_type == 'house':
+    from hgraph import House, HouseGranular
+    class_label = hgraph.y
+    class_label_name = [House(c.item()).name for c in class_label]
+    subclass_label_name = get_subclass_labels(hgraph)
+    subclass_label = torch.tensor([getattr(HouseGranular, c).value for c in subclass_label_name])
+
+if motif_type == 'cycle':
+    from hgraph import Cycle
+    class_label = hgraph.y
+    class_label_name = [Cycle(c.item()).name for c in class_label]
+
+if motif_type == 'grid':
+    from hgraph import Grid
+    class_label = hgraph.y
+    class_label_name = [Grid(c.item()).name for c in class_label]
+
+# %%
 
 class_label = hgraph.y
-class_label_name = [House(c.item()).name for c in class_label]
-subclass_label_name = get_subclass_labels(hgraph)
-subclass_label = torch.tensor([getattr(HouseGranular, c).value for c in subclass_label_name])
-
+class_label_name = class_label
 
 # %%
 
@@ -194,7 +207,7 @@ ac_subclass = ActivationClassifier(
 print(f"Concept completeness on subclasses: {ac_subclass.get_classifier_accuracy():.3f}")
 
 
-print(f"final train acc {eval(hgraph, model, hgraph.train_mask):.3f} | final val acc {eval(hgraph, model, hgraph.val_mask):.3f}")
+print(f"train acc {eval(hgraph, model, hgraph.train_mask):.3f} | val acc {eval(hgraph, model, hgraph.val_mask):.3f}")
 
 # %%
 
@@ -234,6 +247,7 @@ hnx.draw(hgraph_local, with_node_labels=True)
 
 # may need to tune these dynamically depending on... the size of hgraph_local?
 coeffs = {'size': 0.005, 'ent': 0.01}
+# coeffs = {'size': 0.0005, 'ent': 0.01} # for zoo?
 
 if isinstance(model, models.allset.models.SetGNN): 
     hgnn_explain_sparse(
@@ -295,8 +309,8 @@ sns.heatmap(df, annot=True, cmap='viridis', fmt='.2f', cbar=False, annot_kws={"f
 
 # %%
 
-hgraph_expl = show_learnt_subgraph(hgraph_local, thresh=0.5, node_to_include=node_idx, cfg=cfg)
-# hgraph_expl = show_learnt_subgraph(hgraph_local, thresh_num=10, node_to_include=node_idx, cfg=cfg)
+hgraph_expl = show_learnt_subgraph(hgraph_local, thresh=0.5, node_to_include=None, cfg=cfg)
+# hgraph_expl = show_learnt_subgraph(hgraph_local, thresh_num=10, node_to_include=None, cfg=cfg)
 transfer_features(hgraph, hgraph_expl, cfg)
 
 
@@ -318,7 +332,7 @@ with torch.no_grad():
     # -------------------------------------------------
     print("human-selected graph")
 
-    hgraph_selected = get_human_motif(node_idx, hgraph, cfg)
+    hgraph_selected = get_human_motif(node_idx, hgraph, cfg, motif_type)
     logits_selected = model(hgraph_selected)[hgraph_selected.node_to_ind[node_idx]]
     pred_selected = logits_selected.softmax(dim=-1)
     print("class probs", torch.round(pred_selected, decimals=3))
@@ -355,8 +369,11 @@ with torch.no_grad():
 
     # -------------------------------------------------
     print("learnt explanation subgraph, sharpened with thresh=0.5")
-    logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
-    pred_expl = logits_expl.softmax(dim=-1)
+    if node_idx in hgraph_expl.node_to_ind:
+        logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
+        pred_expl = logits_expl.softmax(dim=-1)
+    else:
+        pred_expl = torch.ones_like(pred_actual) * np.nan
     print("class probs", torch.round(pred_expl, decimals=3))
     
 
@@ -383,7 +400,7 @@ ax[0].set_title("local computational graph")
 hnx.draw(hgraph_selected, with_node_labels=True, ax=ax[1])
 ax[1].set_title("human-selected graph")
 hnx.draw(hgraph_expl, with_node_labels=True, ax=ax[2])
-ax[2].set_title("learnt explanation graph")
+ax[2].set_title("learnt explanation graph" + " (LOST NODE)" if torch.any(torch.isnan(pred_expl)).item() else "learnt explanation graph")
 
 plt.show()
 # %%

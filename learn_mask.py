@@ -23,14 +23,12 @@ import models.allset
 # %%
 
 
-def load_stuff(fn: str, num_house_types: int = 1, num_classes: int = 4):
+def load_stuff(cfg):
 
-    path = Path(fn)
-    cfg, train_stats, hgraph, model = get_single_run(path, device=torch.device("cpu"))
-    hgraph.num_house_types = num_house_types
-    hgraph.num_classes = num_classes
+    path = Path(cfg.load_fn)
+    cfg, train_stats, hgraph, model = get_single_run(path, torch.device('cpu'), cfg.load_best)
 
-    print(f"final train acc {eval(hgraph, model, hgraph.train_mask):.3f} | final val acc {eval(hgraph, model, hgraph.val_mask):.3f}")
+    print(f"train acc {eval(hgraph, model, hgraph.train_mask):.3f} | val acc {eval(hgraph, model, hgraph.val_mask):.3f}")
 
     return cfg, hgraph, model
 
@@ -40,13 +38,9 @@ def run_experiment(cfg, cfg_model, hgraph, model):
 
     set_seed(cfg.seed)
 
-    hgraph_local = get_local_hypergraph(idx=cfg.node_idx, hgraph=hgraph, num_expansions=3, is_hedge_concept=False)
+    hgraph_local = get_local_hypergraph(idx=cfg.node_idx, hgraph=hgraph, num_expansions=cfg.num_expansions, is_hedge_concept=False)
     transfer_features(hgraph, hgraph_local, cfg_model)
 
-    # plt.figure()
-    # plt.title(f"Node {node_idx} | label {hgraph.y[node_idx].item()}")
-    # hnx.draw(hgraph_local, with_node_labels=True)
-    # plt.show()
 
     if cfg.log_wandb:
         node_class = hgraph.y[cfg.node_idx].item()
@@ -95,29 +89,99 @@ def run_experiment(cfg, cfg_model, hgraph, model):
         H_learnt = hgraph_local.H.detach().cpu()
         H_learnt = np.where(hgraph_local.H_unmasked == 1.0, H_learnt, np.nan)
 
-
-    # df = pd.DataFrame(
-    #     H_learnt,
-    #     index=hgraph_local.ind_to_node.values(),
-    #     columns=hgraph_local.ind_to_edge.values(),
-    #     )
-
-    # plt.figure(figsize=(5,3))
-    # sns.heatmap(df, annot=True, cmap='viridis', fmt='.2f', cbar=False, annot_kws={"fontsize":8})
-
-
-    hgraph_expl = show_learnt_subgraph(hgraph_local, thresh=0.5, node_to_include=cfg.node_idx, cfg=cfg_model)
-    # hgraph_expl = show_learnt_subgraph(hgraph_local, thresh_num=10, node_to_include=node_idx, cfg=cfg_model)
+    
+    # explanation subgraph
+    hgraph_expl = show_learnt_subgraph(hgraph_local, thresh=0.5, node_to_include=None, cfg=cfg_model)
     transfer_features(hgraph, hgraph_expl, cfg_model)
+    summary_expl = get_summary_nogt(cfg, hgraph, hgraph_local, hgraph_expl, model)
 
+    # complement subgraph
+    hgraph_local.H = torch.nan_to_num(1. - torch.tensor(H_learnt), nan=0.0) # get the complementary
+    hgraph_local.norm = 1. - hgraph_local.norm
+    hgraph_compl = show_learnt_subgraph(hgraph_local, thresh=0.5, node_to_include=None, cfg=cfg_model)
+    transfer_features(hgraph, hgraph_compl, cfg_model)
+    summary_compl = get_summary_nogt(cfg, hgraph, hgraph_local, hgraph_compl, model)
 
-    summary = print_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
+    summary = {'explanation': summary_expl, 'complement': summary_compl}
+
+    # summary = print_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
     # summary = get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
+
 
     if cfg.log_wandb:
         wandb.finish()
         
     return summary
+
+
+@torch.no_grad()
+def get_summary_nogt(config, hgraph, hgraph_local, hgraph_expl, model):
+
+    node_idx = config.node_idx
+    node_class = hgraph.y[node_idx].item()
+
+    SUMMARY = {}
+
+    # -------------------------------------------------
+    # original graph
+    logits_target = model(hgraph)[node_idx]
+    pred_target = logits_target.softmax(dim=-1)
+
+
+    # -------------------------------------------------
+    # local computational graph, fractionally-relaxed
+
+    logits_actual = model(hgraph_local)[hgraph_local.node_to_ind[node_idx]]
+    pred_actual = logits_actual.softmax(dim=-1)
+
+
+    loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
+        hgraph_local.norm,
+        pred_actual,
+        pred_target,
+        pred_target.argmax().item(),
+        loss_pred_type=config.loss_pred_type,
+        coeffs=config.coeffs,
+    )
+
+    SUMMARY.update({
+        'loss/relaxed': loss.item(),
+        'loss_pred/relaxed': loss_pred.item(),
+        'loss_size/relaxed': loss_size.item(),
+        'loss_mask_ent/relaxed': loss_mask_ent.item(),
+        'classprob/relaxed': pred_actual.tolist(),
+    })
+
+    # -------------------------------------------------
+    # learnt explanation subgraph, sharpened with thresh=0.5
+
+    if node_idx in hgraph_expl.node_to_ind:
+        logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
+        pred_expl = logits_expl.softmax(dim=-1)
+    else:
+        pred_expl = torch.ones_like(pred_actual) * np.nan
+    
+    assert torch.allclose(hgraph_expl.norm, torch.ones_like(hgraph_expl.norm)) # since only kept the 1s
+
+    loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
+        hgraph_expl.norm * (1.0 - 1e-6), # to compute non-nan loss_mask_ent
+        pred_expl,
+        pred_target,
+        pred_target.argmax().item(),
+        loss_pred_type=config.loss_pred_type,
+        coeffs=config.coeffs,
+    )
+
+    SUMMARY.update({
+        'loss/binarised': loss.item(),
+        'loss_pred/binarised': loss_pred.item(),
+        'loss_size/binarised': loss_size.item(),
+        'loss_mask_ent/binarised': loss_mask_ent.item(),
+        'classprob/binarised': pred_expl.tolist(),
+    })
+
+    return SUMMARY
+
 
 @torch.no_grad()
 def get_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
@@ -135,7 +199,7 @@ def get_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
     # -------------------------------------------------
     # human-selected graph
 
-    hgraph_selected = get_human_motif(node_idx, hgraph, cfg_model)
+    hgraph_selected = get_human_motif(node_idx, hgraph, cfg_model, config.motif)
     logits_selected = model(hgraph_selected)[hgraph_selected.node_to_ind[node_idx]]
     pred_selected = logits_selected.softmax(dim=-1)
 
@@ -192,9 +256,12 @@ def get_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
     # -------------------------------------------------
     # learnt explanation subgraph, sharpened with thresh=0.5
 
-    logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
-    pred_expl = logits_expl.softmax(dim=-1)    
-
+    if node_idx in hgraph_expl.node_to_ind:
+        logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
+        pred_expl = logits_expl.softmax(dim=-1)
+    else:
+        pred_expl = torch.ones_like(pred_actual) * np.nan
+    
     assert torch.allclose(hgraph_expl.norm, torch.ones_like(hgraph_expl.norm)) # since only kept the 1s
 
     loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
@@ -244,7 +311,7 @@ def print_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
 
     # -------------------------------------------------
     print("human-selected graph")
-    hgraph_selected = get_human_motif(node_idx, hgraph, cfg_model)
+    hgraph_selected = get_human_motif(node_idx, hgraph, cfg_model, config.motif)
     logits_selected = model(hgraph_selected)[hgraph_selected.node_to_ind[node_idx]]
     pred_selected = logits_selected.softmax(dim=-1)
     print("class probs", torch.round(pred_selected.detach(), decimals=3))
@@ -302,8 +369,11 @@ def print_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
 
     # -------------------------------------------------
     print("learnt explanation subgraph, sharpened with thresh=0.5")
-    logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
-    pred_expl = logits_expl.softmax(dim=-1)
+    if node_idx in hgraph_expl.node_to_ind:
+        logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
+        pred_expl = logits_expl.softmax(dim=-1)
+    else:
+        pred_expl = torch.ones_like(pred_actual) * np.nan
     print("class probs", torch.round(pred_expl, decimals=3))
     
 
@@ -340,7 +410,7 @@ def print_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
         hnx.draw(hgraph_selected, with_node_labels=True, ax=ax[1])
         ax[1].set_title("human-selected graph")
         hnx.draw(hgraph_expl, with_node_labels=True, ax=ax[2])
-        ax[2].set_title("learnt explanation graph")
+        ax[2].set_title("learnt explanation graph" + " (LOST NODE)" if torch.any(torch.isnan(pred_expl)).item() else "learnt explanation graph")
 
         # plt.show()
 
@@ -380,7 +450,7 @@ def main(config : DictConfig) -> None:
 
     print(config)
 
-    cfg_model, hgraph, model = load_stuff(config.load_fn)
+    cfg_model, hgraph, model = load_stuff(config)
 
     for node_idx in node_idxs:
         for coeff_size in coeffs_size:
@@ -396,19 +466,18 @@ def main(config : DictConfig) -> None:
                 run_experiment(cfg, cfg_model, hgraph, model)
 
 
-
+# @hydra.main(version_base=None, config_path="configs", config_name="learn_mask_zoo")
+# def learn_mask_for_all_nodes(config : DictConfig) -> None:
 def learn_mask_for_all_nodes():
         
         config = EasyDict(
-            load_fn = 'train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1',
-            # load_fn = 'train_results/allsettransformer/unperturbed_v3/hgraph0',
-            coeffs = EasyDict(
-                size = 0.005,
-                ent = 0.01,
-            ),
-            lr=0.01,
-            num_epochs=400,
-            loss_pred_type="kl_div",
+            load_fn = 'train_results/zoo/allsettransformer/run1',
+            load_best = False,
+            coeffs = EasyDict(size=0.0005, ent= 0.01),
+            num_expansions = 1,
+            lr = 0.01,
+            num_epochs = 800,
+            loss_pred_type = 'kl_div',
             scheduler = None,
             seed = 42,
             log_wandb = False,
@@ -418,7 +487,7 @@ def learn_mask_for_all_nodes():
 
         SUMMARY = {}
 
-        cfg_model, hgraph, model = load_stuff(config.load_fn)
+        cfg_model, hgraph, model = load_stuff(config)
 
         pbar = tqdm(
             total=hgraph.number_of_nodes(),
@@ -435,7 +504,7 @@ def learn_mask_for_all_nodes():
             pbar.update(1)
 
             if node_idx % 25 == 0:
-                with open('learn_mask.json', 'w') as f: 
+                with open('explanation.json', 'w') as f: 
                     json.dump({"config": config, "summary": SUMMARY}, f, indent=4)
         
         config.node_idx = None
@@ -445,7 +514,7 @@ def learn_mask_for_all_nodes():
 # %%
 
 if __name__ == "__main__":
-    main()
-    # learn_mask_for_all_nodes()
+    # main()
+    learn_mask_for_all_nodes()
 
 # %%

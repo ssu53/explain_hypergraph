@@ -29,7 +29,7 @@ def data_to_hnxhypergraph(data):
     assert data.x.size(0) == num_nodes
     assert data.y.size(0) == num_nodes
     assert torch.max(data.edge_index[0]).item() == num_nodes-1
-    assert torch.max(data.edge_index[1]).item() == num_edges-1
+    assert torch.max(data.edge_index[1]).item() in [num_edges-1, num_edges+num_nodes-2] # the latter if includes self-loops
 
     incidence_dict = {}
     for i in range(data.edge_index.size(1)):
