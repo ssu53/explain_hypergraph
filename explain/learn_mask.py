@@ -8,7 +8,7 @@ import wandb
 
 from hgraph import incidence_matrix_to_edge_index
 from models.allset import norm_contruction
-from explain import get_edges_of_nodes
+from explain import get_edges_of_nodes, Sparsemax
 
 
 
@@ -76,7 +76,7 @@ def mask_density(masked_adj, adj):
 
 
 
-def mask_values_stats(masked_adj, adj):
+def mask_values_stats(masked_adj, adj, bins: int = 100):
     """
     masked_adj is the masked probabilities on the binary incidence matrix
     adj is the original binary incidence matrix
@@ -92,26 +92,34 @@ def mask_values_stats(masked_adj, adj):
     values_being_learnt = masked_adj[adj != 0.0]
     values_being_learnt = values_being_learnt.flatten().detach().cpu().numpy()
 
-    plt.figure(figsize=(3,3))
-    plt.hist(values_being_learnt, bins=np.linspace(0.0,1.0,100))
+    fig = plt.figure(figsize=(3,3))
+    plt.hist(values_being_learnt, bins=np.linspace(0.0,1.0,bins))
     plt.title("Distribution of learnt mask entries")
     plt.show()
 
+    return fig
 
 
-def mask_values_stats_sparse(mask):
+
+def mask_values_stats_sparse(mask, bins: int = 100):
 
     assert mask.ndim == 1
     values_being_learnt = mask.detach().cpu().numpy()
 
-    plt.figure(figsize=(3,3))
-    plt.hist(values_being_learnt, bins=np.linspace(0.0,1.0,100))
+    fig = plt.figure(figsize=(3,3))
+    plt.hist(values_being_learnt, bins=np.linspace(0.0,1.0,bins))
     plt.title("Distribution of learnt mask entries")
     plt.show()
 
+    return fig
 
 
-def explainer_loss(mask_prob, pred_actual, pred_target, label_target, loss_pred_type, coeffs):
+
+def explainer_loss(mask_prob, pred_actual, pred_target, label_target, loss_pred_type, coeffs, eps=1e-6):
+    """
+    coeffs: size and entropy loss coefficients
+    eps: small number to perturb 0 and 1 entries in mask_prob, for numeric stability in entropy
+    """
 
     if loss_pred_type == "mutual_info":
         """
@@ -139,7 +147,11 @@ def explainer_loss(mask_prob, pred_actual, pred_target, label_target, loss_pred_
     
 
     loss_size = coeffs['size'] * torch.sum(mask_prob)
+    
+    mask_prob = torch.where(mask_prob == 0., eps, mask_prob)
+    mask_prob = torch.where(mask_prob == 1., 1.-eps, mask_prob)
     mask_ent = -mask_prob * torch.log(mask_prob) - (1 - mask_prob) * torch.log(1 - mask_prob)
+    
     loss_mask_ent = coeffs['ent'] * torch.mean(mask_ent)
 
     loss = loss_pred + loss_size + loss_mask_ent
@@ -160,6 +172,8 @@ def hgnn_explain_sparse(
         hgraph_full=None,
         coeffs=None,
         scheduler_fn=None,
+        sample_with='gumbel_softmax',
+        tau=1.0,
         verbose=True,
         wandb_config=None,
     ):
@@ -190,13 +204,42 @@ def hgnn_explain_sparse(
 
 
     if init_strategy == "const":
-        mask = torch.ones_like(hgraph.norm).to(torch.float32)
-        mask = mask * 3
+        if sample_with == 'sigmoid':
+            mask = torch.ones_like(hgraph.norm).to(torch.float32)
+            mask = mask * 3 # ~0.95 thru sigmoid
+        elif sample_with == 'gumbel_softmax':
+            mask_no = torch.ones_like(hgraph.norm).to(torch.float32)
+            mask_yes = torch.ones_like(hgraph.norm).to(torch.float32)
+            mask_yes = mask_yes * 4
+            mask = torch.stack((mask_no, mask_yes), dim=-1) # ~[0.95, 0.05] thru softmax
+        elif sample_with == 'sparsemax':
+            mask_no = torch.ones_like(hgraph.norm).to(torch.float32)
+            mask_yes = torch.ones_like(hgraph.norm).to(torch.float32)
+            mask_yes = mask_yes * 1.5
+            mask = torch.stack((mask_no, mask_yes), dim=-1) # [0.25, 0.75] thru sparsemax
+            print(mask)
+            sparsemax = Sparsemax(dim=1)
+        else:
+            raise NotImplementedError
     elif init_strategy == "normal":
-        mask = torch.empty_like(hgraph.norm).to(torch.float32)
-        std = torch.nn.init.calculate_gain("relu") * (2.0 / mask.shape[0]) ** 0.5 # yolo'd the gain value here
-        with torch.no_grad():
-            mask.normal_(1.0, std)
+        if sample_with == 'sigmoid':
+            mask = torch.empty_like(hgraph.norm).to(torch.float32)
+            std = torch.nn.init.calculate_gain("relu") * (2.0 / mask.shape[0]) ** 0.5 # yolo'd the gain value here
+            with torch.no_grad():
+                mask.normal_(1.0, std)
+        elif sample_with == 'gumbel_softmax':
+            mask = torch.empty((hgraph.norm.size(0), 2)).to(torch.float32)
+            std = torch.nn.init.calculate_gain("relu") * (2.0 / mask.shape[0]) ** 0.5 # yolo'd the gain value here
+            with torch.no_grad():
+                mask.normal_(1.0, std)
+        elif sample_with == 'sparsemax':
+            mask = torch.empty((hgraph.norm.size(0), 2)).to(torch.float32)
+            std = torch.nn.init.calculate_gain("relu") * (2.0 / mask.shape[0]) ** 0.5 # yolo'd the gain value here
+            with torch.no_grad():
+                mask.normal_(1.0, std)
+            sparsemax = Sparsemax(dim=1)
+        else:
+            raise NotImplementedError
     else:
         raise NotImplementedError
 
@@ -212,18 +255,41 @@ def hgnn_explain_sparse(
 
     if verbose:
         print(f"Learning subgraph for node #{node} with model label {label_target} and g.t. label {hgraph.y[hgraph.node_to_ind[node]]}")
+    
+    if sample_with == 'sigmoid':
+        mask_prob = torch.sigmoid(mask)
+        # hgraph.H = mask_prob * hgraph.H_unmasked
+        hgraph.norm = mask_prob
+    elif sample_with == 'gumbel_softmax':
+        mask_prob = torch.nn.functional.gumbel_softmax(mask, tau=tau, hard=True)
+        mask_prob = mask_prob[:,1] # differentiably index the column at 1 i.e. 'yes'
+        hgraph.norm = mask_prob
+    elif sample_with == 'sparsemax':
+        mask_prob = sparsemax(mask)
+        mask_prob = mask_prob[:,1]
+        hgraph.norm = mask_prob
 
-    mask_prob = torch.sigmoid(mask)
-    # hgraph.H = mask_prob * hgraph.H_unmasked
-    hgraph.norm = mask_prob
 
     lrs = []
 
-    for epoch in range(1,num_epochs+1):
+    loss_best = None
+    mask_prob_best = None
 
-        ind = hgraph.node_to_ind[node]
+    ind = hgraph.node_to_ind[node]
+
+    backprop_on_hard_mask = False
+
+    for epoch in range(num_epochs):
+
         logits_actual = model(hgraph)[ind]
         pred_actual = logits_actual.softmax(dim=0)
+        
+        if backprop_on_hard_mask:
+            norm_soft = hgraph.norm.clone()
+            hgraph.norm = torch.round(norm_soft, decimals=0) # compute logits on binarised
+            logits_actual = model(hgraph)[ind]
+            pred_actual = logits_actual.softmax(dim=0)
+            hgraph.norm = norm_soft # restore
 
         # coeffs = {'size': coeffs['size'], 'ent': min(coeff_ent_max * epoch / num_epochs * 2, coeff_ent_max)}
 
@@ -235,11 +301,9 @@ def hgnn_explain_sparse(
             loss_pred_type,
             coeffs,
         )
-
-        # update mask values into hgraph
-        mask_prob = torch.sigmoid(mask)
-        # hgraph.H = mask_prob * hgraph.H_unmasked
-        hgraph.norm = mask_prob
+        if loss_best is None or loss.item() < loss_best:
+            loss_best = loss.item()
+            mask_prob_best = mask_prob.clone()
 
         if wandb_config is not None:
             wandb.log({
@@ -267,7 +331,49 @@ def hgnn_explain_sparse(
         loss.backward()
         optimiser.step()
         if scheduler_fn is not None: scheduler.step()
+
+        if sample_with == 'sigmoid':
+            mask_prob = torch.sigmoid(mask)
+            # hgraph.H = mask_prob * hgraph.H_unmasked
+            hgraph.norm = mask_prob
+        elif sample_with == 'gumbel_softmax':
+            mask_prob = torch.nn.functional.gumbel_softmax(mask, tau=tau, hard=True)
+            mask_prob = mask_prob[:,1] # the column at index 1 is the 'yes'
+            hgraph.norm = mask_prob
+        elif sample_with == 'sparsemax':
+            mask_prob = sparsemax(mask)
+            mask_prob = mask_prob[:,1]
+            hgraph.norm = mask_prob
     
+
+    # compute loss after final optimiser step
+    logits_actual = model(hgraph)[ind]
+    pred_actual = logits_actual.softmax(dim=0)
+    loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
+        mask_prob,
+        pred_actual,
+        pred_target if loss_pred_type == "kl_div" else None,
+        label_target if loss_pred_type == "maximise_label" else None,
+        loss_pred_type,
+        coeffs,
+    )
+    if loss_best is None or loss.item() < loss_best:
+        loss_best = loss.item()
+        mask_prob_best = mask_prob.clone()
+    
+    if verbose:
+        print(
+            num_epochs, 
+            f"{loss.item():.2f}", 
+            f"{loss_pred.item():.2f}", 
+            f"{loss_size.item():.2f}", 
+            f"{loss_mask_ent.item():.2f}", 
+            # f"{mask_density(hgraph_local.H, hgraph_local.H_unmasked):.2f}",
+            f"{mask_density(hgraph.norm, torch.ones_like(hgraph.norm)):.2f}",
+            np.round(logits_actual.detach().cpu().numpy(),2),
+            np.round(pred_actual.detach().cpu().numpy(),2),
+        )
+
     if wandb_config is not None:
         wandb.log({
             'train/loss': loss,
@@ -277,9 +383,16 @@ def hgnn_explain_sparse(
             'train/mask_density': mask_density(hgraph.norm, torch.ones_like(hgraph.norm)),
         })
 
-    if verbose:
-        # mask_values_stats(hgraph.H, hgraph.H_unmasked)
-        mask_values_stats_sparse(mask_prob)
+
+    # restore the best
+    mask_prob = mask_prob_best
+    hgraph.norm = mask_prob
+
+    # fig = mask_values_stats(hgraph.H, hgraph.H_unmasked)
+    fig = mask_values_stats_sparse(mask_prob)
+    
+    if wandb_config is not None:
+        wandb.log({"mask_stats": wandb.Image(fig)})
 
     if verbose and (scheduler_fn is not None):
         plt.figure(figsize=(3,3))

@@ -360,6 +360,7 @@ class SetGNN(nn.Module):
                                              heads=args.heads,
                                              attention=args.PMA,
                                              alpha_softmax=args.alpha_softmax,
+                                             pma_layernorm=args.pma_layernorm,
                                              ))
             self.bnV2Es.append(nn.BatchNorm1d(args.MLP_hidden))
             self.E2VConvs.append(HalfNLHconv(in_dim=args.MLP_hidden,
@@ -372,6 +373,7 @@ class SetGNN(nn.Module):
                                              heads=args.heads,
                                              attention=args.PMA,
                                              alpha_softmax=args.alpha_softmax,
+                                             pma_layernorm=args.pma_layernorm,
                                              ))
             self.bnE2Vs.append(nn.BatchNorm1d(args.MLP_hidden))
             for _ in range(self.All_num_layers-1):
@@ -385,6 +387,7 @@ class SetGNN(nn.Module):
                                                  heads=args.heads,
                                                  attention=args.PMA,
                                                  alpha_softmax=args.alpha_softmax,
+                                                 pma_layernorm=args.pma_layernorm,
                                                  ))
                 self.bnV2Es.append(nn.BatchNorm1d(args.MLP_hidden))
                 self.E2VConvs.append(HalfNLHconv(in_dim=args.MLP_hidden,
@@ -397,6 +400,7 @@ class SetGNN(nn.Module):
                                                  heads=args.heads,
                                                  attention=args.PMA,
                                                  alpha_softmax=args.alpha_softmax,
+                                                 pma_layernorm=args.pma_layernorm,
                                                  ))
                 self.bnE2Vs.append(nn.BatchNorm1d(args.MLP_hidden))
             if self.GPR:

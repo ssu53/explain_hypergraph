@@ -12,6 +12,7 @@ All_num_layers: 3
 dropout: 0.0
 aggregate: 'add'
 normalization: 'ln'
+pma_layernorm: True        # default True ln in PMA of AllSetTransformer
 deepset_input_norm: False
 GPR: False
 MLP_hidden: 16
@@ -33,7 +34,7 @@ path_data: 'data/unperturbed_v3/hgraph0.pickle'
 # path_data: 'data/treegrid_v0/hgraph0.pickle'
 
 save_dir: 'train_results/allsettransformer/unperturbed_v3/hgraph_rerun5'
-# save_dir: 'train_results/treecycle_v0/allsettransformer/hgraph0'
+# save_dir: 'train_results/treecycle_v0/allsettransformer/hgraph0/run2'
 # save_dir: 'train_results/treegrid_v0/allsettransformer/hgraph0'
 
 

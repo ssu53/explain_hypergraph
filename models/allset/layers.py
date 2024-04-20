@@ -52,7 +52,9 @@ class PMA(MessagePassing):
 
     def __init__(self, in_channels, hid_dim,
                  out_channels, num_layers, heads=1, concat=True,
-                 negative_slope=0.2, dropout=0.0, bias=False, alpha_softmax=True, **kwargs):
+                 negative_slope=0.2, dropout=0.0, bias=False, alpha_softmax=True, 
+                 pma_layernorm=True,
+                 **kwargs):
         #         kwargs.setdefault('aggr', 'add')
         super(PMA, self).__init__(node_dim=0, **kwargs)
 
@@ -65,6 +67,7 @@ class PMA(MessagePassing):
         self.dropout = 0.
         self.aggr = 'add'
         self.alpha_softmax = alpha_softmax
+        self.pma_layernorm = pma_layernorm
 #         self.input_seed = input_seed
 
 #         This is the encoder part. Where we use 1 layer NN (Theta*x_i in the GATConv description)
@@ -81,8 +84,12 @@ class PMA(MessagePassing):
                        out_channels=out_channels,
                        num_layers=num_layers,
                        dropout=.0, Normalization='None',)
-        self.ln0 = nn.LayerNorm(self.heads*self.hidden)
-        self.ln1 = nn.LayerNorm(self.heads*self.hidden)
+        if pma_layernorm:
+            self.ln0 = nn.LayerNorm(self.heads*self.hidden)
+            self.ln1 = nn.LayerNorm(self.heads*self.hidden)
+        else:
+            self.ln0 = nn.Identity()
+            self.ln1 = nn.Identity()
 #         if bias and concat:
 #             self.bias = Parameter(torch.Tensor(heads * out_channels))
 #         elif bias and not concat:
@@ -101,8 +108,9 @@ class PMA(MessagePassing):
         glorot(self.lin_K.weight)
         glorot(self.lin_V.weight)
         self.rFF.reset_parameters()
-        self.ln0.reset_parameters()
-        self.ln1.reset_parameters()
+        if self.pma_layernorm:
+            self.ln0.reset_parameters()
+            self.ln1.reset_parameters()
 #         glorot(self.att_l)
         nn.init.xavier_uniform_(self.att_r)
 #         zeros(self.bias)
@@ -636,6 +644,7 @@ class HalfNLHconv(MessagePassing):
                  heads=1,
                  attention=True,
                  alpha_softmax=True,
+                 pma_layernorm=True,
                  ):
         super(HalfNLHconv, self).__init__()
 
@@ -643,7 +652,7 @@ class HalfNLHconv(MessagePassing):
         self.dropout = dropout
 
         if self.attention:
-            self.prop = PMA(in_dim, hid_dim, out_dim, num_layers, heads=heads, alpha_softmax=alpha_softmax)
+            self.prop = PMA(in_dim, hid_dim, out_dim, num_layers, heads=heads, alpha_softmax=alpha_softmax, pma_layernorm=pma_layernorm)
         else:
             if num_layers > 0:
                 self.f_enc = MLP(in_dim, hid_dim, hid_dim, num_layers, dropout, Normalization, InputNorm)

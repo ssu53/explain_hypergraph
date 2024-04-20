@@ -1,37 +1,49 @@
 name: learn_mask
 
-# load_fn: 'train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1'
+# # load_fn: 'train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1'
 # load_fn: 'train_results/allsettransformer/unperturbed_v3/hgraph0'
 # motif: 'house'
 # load_best: False
 # node_idx: [
-#     # 580, 750, 600, 605, 610, 615, 620, 625,  # class 1
+#     580, 750, 600, 605, 610, 615, 620, 625,  # class 1
 #     636, 671, 466, 491, 496, 501, 506, 511,  # class 2, connected to base
 #     637, 672, 487, 492, 497, 502, 507, 512,  # class 2, not connected to base
 #     409, 689, 518, 519, 523, 524, 528, 529,  # class 3
 # ]
 
 
-# load_fn: 'train_results/treecycle_v0/allsettransformer/hgraph0'
-# load_best: False
-# motif: 'cycle'
-# node_idx: [
-#     471, 447, 375,      # cluster (at anchor)
-#     727, 409, 289,      # cluster (one hop from anchor)
-#     282, 630, 636,      # cluster (two hops from anchor)
-# ]
-
-
-load_fn: 'train_results/treegrid_v0/allsettransformer/hgraph0'
-load_best: True
-motif: 'grid'
+load_fn: 'train_results/treecycle_v0/allsettransformer/hgraph0/run0'
+load_best: False
+motif: 'cycle'
 node_idx: [
-    419, 418, 423,                                # from one cluster
-    363, 795,                                     # from another cluster (impure)
-    420, 421, 422, 423, 424, 425,                 # rest of that motif
-    364, 365, 366, 367, 368, 369, 370, 371,       # rest of that motif
-    255, 256, 257, 258, 259, 260, 261, 262, 263,  # a random motif
+
+    # from run0
+    471, 447, 375,      # cluster (at anchor)
+    727, 409, 289,      # cluster (one hop from anchor)
+    282, 630, 636,      # cluster (two hops from anchor)
+    
+    # from run1
+    # 303, 513, 351,      # cluster (at anchor)
+    # 469, 535, 523,      # cluster (one hop from anchor)
+    # 470, 428, 626,      # cluster (one hop from anchor)
+    # 600, 594, 258,      # cluster (two hops from anchor)
+
+    # from run2 (all layernorms turned off)
+    # 687, 387, 585,      # cluster (at anchor)
+    # 475, 481, 551,      # cluster (one hop from anchor)
 ]
+
+
+# load_fn: 'train_results/treegrid_v0/allsettransformer/hgraph0'
+# load_best: True
+# motif: 'grid'
+# node_idx: [
+#     419, 418, 423,                                # from one cluster
+#     363, 795,                                     # from another cluster (impure)
+#     420, 421, 422, 423, 424, 425,                 # rest of that motif
+#     364, 365, 366, 367, 368, 369, 370, 371,       # rest of that motif
+#     255, 256, 257, 258, 259, 260, 261, 262, 263,  # a random motif
+# ]
 
 
 coeffs: 
@@ -45,13 +57,15 @@ lr: 0.01
 num_epochs: 400
 loss_pred_type: kl_div
 scheduler: None
+sample_with: 'sigmoid'
+tau: null
 
 seed: 42
 
 log_wandb: True
 wandb:
   entity: "ssu53"
-  project: "hgraph_mask_treegrid_default"
+  project: "hgraph_mask_cycle"
   experiment_name: ""
 
 defaults:  

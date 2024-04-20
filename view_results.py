@@ -64,16 +64,17 @@ These are unperturbed, otherwise mirroring the above
 # path = Path('train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1')
 
 # treecycle
-# motif_type = 'cycle'
-# path = Path('train_results/treecycle_v0/allsettransformer/hgraph0')
-# load_best = False
+motif_type = 'cycle'
+path = Path('train_results/treecycle_v0/allsettransformer/hgraph0/run0')
+load_best = False
 
 # treegrid
-motif_type = 'grid'
-path = Path('train_results/treegrid_v0/allsettransformer/hgraph0')
-load_best = True
+# motif_type = 'grid'
+# path = Path('train_results/treegrid_v0/allsettransformer/hgraph0')
+# load_best = True
 
 # zoo
+# motif_type = None
 # path = Path('train_results/zoo/allsettransformer/run1')
 # load_best = False
 
@@ -172,10 +173,9 @@ if motif_type == 'grid':
     class_label = hgraph.y
     class_label_name = [Grid(c.item()).name for c in class_label]
 
-# %%
-
-class_label = hgraph.y
-class_label_name = class_label
+if motif_type == None:
+    class_label = hgraph.y
+    class_label_name = class_label
 
 # %%
 
@@ -200,11 +200,11 @@ ac = ActivationClassifier(
 print(f"Concept completeness on classes: {ac.get_classifier_accuracy():.3f}")
 
 
-ac_subclass = ActivationClassifier(
-    activ_node, kmeans_model_node, "decision_tree",
-    hgraph.x.cpu().reshape(-1,1), subclass_label, 
-    hgraph.train_mask.cpu(), hgraph.val_mask.cpu())
-print(f"Concept completeness on subclasses: {ac_subclass.get_classifier_accuracy():.3f}")
+# ac_subclass = ActivationClassifier(
+#     activ_node, kmeans_model_node, "decision_tree",
+#     hgraph.x.cpu().reshape(-1,1), subclass_label, 
+#     hgraph.train_mask.cpu(), hgraph.val_mask.cpu())
+# print(f"Concept completeness on subclasses: {ac_subclass.get_classifier_accuracy():.3f}")
 
 
 print(f"train acc {eval(hgraph, model, hgraph.train_mask):.3f} | val acc {eval(hgraph, model, hgraph.val_mask):.3f}")
@@ -245,9 +245,12 @@ hnx.draw(hgraph_local, with_node_labels=True)
 
 # %%
 
+import sys
+del sys.modules['explain'], sys.modules['explain.sparsemax'], sys.modules['explain.learn_mask']
+from explain import hgnn_explain_sparse
+
 # may need to tune these dynamically depending on... the size of hgraph_local?
 coeffs = {'size': 0.005, 'ent': 0.01}
-# coeffs = {'size': 0.0005, 'ent': 0.01} # for zoo?
 
 if isinstance(model, models.allset.models.SetGNN): 
     hgnn_explain_sparse(
@@ -256,11 +259,13 @@ if isinstance(model, models.allset.models.SetGNN):
         model, 
         init_strategy="const", 
         num_epochs=400, 
-        lr=0.01, 
+        lr=0.1, 
         loss_pred_type="kl_div",
         print_every=25,
         hgraph_full=hgraph,
         coeffs=coeffs,
+        sample_with="sigmoid",
+        tau=None,
         )
 else:
     hgnn_explain(
@@ -338,7 +343,7 @@ with torch.no_grad():
     print("class probs", torch.round(pred_selected, decimals=3))
     
     loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-        hgraph_selected.norm * (1.0 - 1e-6), # to compute non-nan loss_mask_ent
+        hgraph_selected.norm,
         pred_selected,
         pred_target,
         pred_target.argmax().item(),
@@ -380,7 +385,7 @@ with torch.no_grad():
     assert torch.allclose(hgraph_expl.norm, torch.ones_like(hgraph_expl.norm)) # since only kept the 1s
 
     loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-        hgraph_expl.norm * (1.0 - 1e-6), # to compute non-nan loss_mask_ent
+        hgraph_expl.norm,
         pred_expl,
         pred_target,
         pred_target.argmax().item(),

@@ -61,6 +61,8 @@ def run_experiment(cfg, cfg_model, hgraph, model):
         num_epochs=cfg.num_epochs, 
         lr=cfg.lr, 
         loss_pred_type=cfg.loss_pred_type,
+        sample_with=cfg.sample_with,
+        tau=cfg.tau,
         hgraph_full=hgraph,
         coeffs=cfg.coeffs,
         # scheduler_fn=partial(torch.optim.lr_scheduler.CosineAnnealingLR, T_max=50),
@@ -93,18 +95,18 @@ def run_experiment(cfg, cfg_model, hgraph, model):
     # explanation subgraph
     hgraph_expl = show_learnt_subgraph(hgraph_local, thresh=0.5, node_to_include=None, cfg=cfg_model)
     transfer_features(hgraph, hgraph_expl, cfg_model)
-    summary_expl = get_summary_nogt(cfg, hgraph, hgraph_local, hgraph_expl, model)
+    # summary_expl = get_summary_nogt(cfg, hgraph, hgraph_local, hgraph_expl, model)
 
-    # complement subgraph
-    hgraph_local.H = torch.nan_to_num(1. - torch.tensor(H_learnt), nan=0.0) # get the complementary
-    hgraph_local.norm = 1. - hgraph_local.norm
-    hgraph_compl = show_learnt_subgraph(hgraph_local, thresh=0.5, node_to_include=None, cfg=cfg_model)
-    transfer_features(hgraph, hgraph_compl, cfg_model)
-    summary_compl = get_summary_nogt(cfg, hgraph, hgraph_local, hgraph_compl, model)
+    # # complement subgraph
+    # hgraph_local.H = torch.nan_to_num(1. - torch.tensor(H_learnt), nan=0.0) # get the complementary
+    # hgraph_local.norm = 1. - hgraph_local.norm
+    # hgraph_compl = show_learnt_subgraph(hgraph_local, thresh=0.5, node_to_include=None, cfg=cfg_model)
+    # transfer_features(hgraph, hgraph_compl, cfg_model)
+    # summary_compl = get_summary_nogt(cfg, hgraph, hgraph_local, hgraph_compl, model)
 
-    summary = {'explanation': summary_expl, 'complement': summary_compl}
+    # summary = {'explanation': summary_expl, 'complement': summary_compl}
 
-    # summary = print_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
+    summary = print_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
     # summary = get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
 
 
@@ -361,7 +363,7 @@ def print_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
     if wandb_config is not None:
         wandb.log({
             'loss/relaxed': loss / loss_human,
-            'loss_pred/relaxed': loss_pred / loss_pred_human,
+            'loss_pred/relaxed': loss_pred,
             'loss_size/relaxed': loss_size / loss_size_human,
             'loss_mask_ent/relaxed': loss_mask_ent / loss_mask_ent_human,
             'classprob/relaxed': pred_actual[node_class],
@@ -393,7 +395,7 @@ def print_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
     if wandb_config is not None:
         wandb.log({
             'loss/binarised': loss / loss_human,
-            'loss_pred/binarised': loss_pred / loss_pred_human,
+            'loss_pred/binarised': loss_pred,
             'loss_size/binarised': loss_size / loss_size_human,
             'loss_mask_ent/binarised': loss_mask_ent / loss_mask_ent_human,
             'classprob/binarised': pred_expl[node_class],
@@ -514,7 +516,7 @@ def learn_mask_for_all_nodes():
 # %%
 
 if __name__ == "__main__":
-    # main()
-    learn_mask_for_all_nodes()
+    main()
+    # learn_mask_for_all_nodes()
 
 # %%
