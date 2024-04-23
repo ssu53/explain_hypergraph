@@ -192,6 +192,8 @@ class PMA(MessagePassing):
         alpha = alpha_j
         alpha = F.leaky_relu(alpha, self.negative_slope)
         if self.alpha_softmax:
+            big_negative_number = -1e9
+            alpha = torch.where(norm.view(-1,1) > 0.0, alpha, big_negative_number)
             alpha = softmax(alpha, index, ptr, index.max()+1)
         self._alpha = alpha
         alpha = F.dropout(alpha, p=self.dropout, training=self.training)
