@@ -4,7 +4,7 @@ base: tree
 motif: cycle
 depth: 8
 num_motifs: 80
-num_random_edges: 0
+num_random_edges: 80
 deg_random_edges: 2
 
 features: ones

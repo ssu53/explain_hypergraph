@@ -24,12 +24,15 @@ def data_to_hnxhypergraph(data):
     from torch_geometric.data import Data
     assert isinstance(data, Data)
 
-    num_nodes, num_edges = data.n_x, data.num_hyperedges
+    num_nodes = data.n_x
 
     assert data.x.size(0) == num_nodes
     assert data.y.size(0) == num_nodes
     assert torch.max(data.edge_index[0]).item() == num_nodes-1
-    assert torch.max(data.edge_index[1]).item() in [num_edges-1, num_edges+num_nodes-2] # the latter if includes self-loops
+    if hasattr(data, 'totedges'):
+        assert torch.max(data.edge_index[1]).item() == data.totedges-1 # num_hyperedges \neq totedges if preprocessing included self-loops etc.
+    else:
+        assert torch.max(data.edge_index[1]).item() == data.num_hyperedges-1
 
     incidence_dict = {}
     for i in range(data.edge_index.size(1)):

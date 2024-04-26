@@ -12,7 +12,7 @@ from explain import get_edges_of_nodes, Sparsemax
 
 
 
-def transfer_features(hgraph, sub_hgraph, cfg):
+def transfer_features(hgraph, sub_hgraph, cfg, isolated_node=False):
 
     assert all(node in hgraph.nodes() for node in sub_hgraph.nodes())
     assert all(hedge in hgraph.edges() for hedge in sub_hgraph.edges())
@@ -46,8 +46,15 @@ def transfer_features(hgraph, sub_hgraph, cfg):
     sub_hgraph.edge_index = incidence_matrix_to_edge_index(sub_hgraph.H_unmasked)
 
     if 'normtype' in cfg:
-        # populate sub_hgraph.norm for AllDeepSets (.norm is not used for AllSetTransformers)
+        # populate sub_hgraph.norm
         norm_contruction(sub_hgraph, option=cfg.normtype)
+
+    if isolated_node:
+        assert sub_hgraph.H.shape == torch.Size([1,1])
+        assert sub_hgraph.norm.shape == torch.Size([1])
+        sub_hgraph.H = torch.zeros_like(sub_hgraph.H)
+        sub_hgraph.H_unmasked = torch.zeros_like(sub_hgraph.H_unmasked)
+        sub_hgraph.norm = sub_hgraph.norm * 0
 
     assert all(hgraph.y[list(sub_hgraph.ind_to_node.values())] == sub_hgraph.y)
     assert all(hgraph.train_mask[list(sub_hgraph.ind_to_node.values())] == sub_hgraph.train_mask)
@@ -76,7 +83,7 @@ def mask_density(masked_adj, adj):
 
 
 
-def mask_values_stats(masked_adj, adj, bins: int = 100):
+def mask_values_stats(masked_adj, adj, bins: int = 100, verbose: bool = True):
     """
     masked_adj is the masked probabilities on the binary incidence matrix
     adj is the original binary incidence matrix
@@ -88,20 +95,21 @@ def mask_values_stats(masked_adj, adj, bins: int = 100):
     assert torch.max(masked_adj).item() <= 1.0
     assert torch.max(masked_adj).item() >= 0.0
 
-    print(f"mask density: {mask_density(masked_adj, adj)}")
+    if verbose: print(f"mask density: {mask_density(masked_adj, adj)}")
     values_being_learnt = masked_adj[adj != 0.0]
     values_being_learnt = values_being_learnt.flatten().detach().cpu().numpy()
 
     fig = plt.figure(figsize=(3,3))
     plt.hist(values_being_learnt, bins=np.linspace(0.0,1.0,bins))
     plt.title("Distribution of learnt mask entries")
-    plt.show()
+    if verbose: plt.show()
+    plt.close()
 
     return fig
 
 
 
-def mask_values_stats_sparse(mask, bins: int = 100):
+def mask_values_stats_sparse(mask, bins: int = 100, verbose: bool = True):
 
     assert mask.ndim == 1
     values_being_learnt = mask.detach().cpu().numpy()
@@ -109,7 +117,8 @@ def mask_values_stats_sparse(mask, bins: int = 100):
     fig = plt.figure(figsize=(3,3))
     plt.hist(values_being_learnt, bins=np.linspace(0.0,1.0,bins))
     plt.title("Distribution of learnt mask entries")
-    plt.show()
+    if verbose: plt.show()
+    plt.close()
 
     return fig
 
@@ -217,7 +226,21 @@ def hgnn_explain_sparse(
             mask_yes = torch.ones_like(hgraph.norm).to(torch.float32)
             mask_yes = mask_yes * 1.5
             mask = torch.stack((mask_no, mask_yes), dim=-1) # [0.25, 0.75] thru sparsemax
-            print(mask)
+            sparsemax = Sparsemax(dim=1)
+        else:
+            raise NotImplementedError
+    elif init_strategy == "const_grow":
+        ind = hgraph.node_to_ind[node]
+        if sample_with == 'sigmoid':
+            mask = torch.where(hgraph.edge_index[0] == ind, 3.0, -3.0).to(torch.float32)
+        elif sample_with == 'gumbel_softmax':
+            mask_no = torch.where(hgraph.edge_index[0] == ind, 1.0, 4.0)
+            mask_yes = torch.where(hgraph.edge_index[0] == ind, 4.0, 1.0)
+            mask = torch.stack([mask_no, mask_yes], dim=-1).to(torch.float32)
+        elif sample_with == 'sparsemax':
+            mask_no = torch.where(hgraph.edge_index[0] == ind, 1.0, 1.5)
+            mask_yes = torch.where(hgraph.edge_index[0] == ind, 1.5, 1.0)
+            mask = torch.stack([mask_no, mask_yes], dim=-1).to(torch.float32)
             sparsemax = Sparsemax(dim=1)
         else:
             raise NotImplementedError
@@ -270,6 +293,7 @@ def hgnn_explain_sparse(
         hgraph.norm = mask_prob
 
 
+    losses = []
     lrs = []
 
     loss_best = None
@@ -304,6 +328,8 @@ def hgnn_explain_sparse(
         if loss_best is None or loss.item() < loss_best:
             loss_best = loss.item()
             mask_prob_best = mask_prob.clone()
+        
+        losses.append(loss.item())
 
         if wandb_config is not None:
             wandb.log({
@@ -374,6 +400,8 @@ def hgnn_explain_sparse(
             np.round(pred_actual.detach().cpu().numpy(),2),
         )
 
+    losses.append(loss.item())
+
     if wandb_config is not None:
         wandb.log({
             'train/loss': loss,
@@ -389,7 +417,7 @@ def hgnn_explain_sparse(
     hgraph.norm = mask_prob
 
     # fig = mask_values_stats(hgraph.H, hgraph.H_unmasked)
-    fig = mask_values_stats_sparse(mask_prob)
+    fig = mask_values_stats_sparse(mask_prob, verbose=verbose)
     
     if wandb_config is not None:
         wandb.log({"mask_stats": wandb.Image(fig)})
@@ -399,6 +427,8 @@ def hgnn_explain_sparse(
         plt.title("learning rate schedule")
         plt.plot(range(1, num_epochs+1), lrs)
         plt.show()
+    
+    return losses
 
 
 
@@ -518,7 +548,10 @@ def hgnn_explain(
 
 
 
-def show_learnt_subgraph(hgraph_learn, thresh_num=None, thresh=None, node_to_include=None, cfg=None):
+def get_learnt_subgraph(hgraph, hgraph_learn, thresh_num=None, thresh=None, cfg=None, node_idx=None, component_only=True):
+
+    # -------------------------------------------------
+    # ensure threshold is populated
 
     if thresh_num is not None:
         thresh = sorted(hgraph_learn.H.detach().cpu().numpy().flatten())[-thresh_num]
@@ -528,18 +561,45 @@ def show_learnt_subgraph(hgraph_learn, thresh_num=None, thresh=None, node_to_inc
         print("Provide thresh_num or thresh as arguments.")
     
 
+    # -------------------------------------------------
+    # get the thresholded subhypergraph
+
     H_sparse = torch.where(hgraph_learn.H >= thresh, 1.0, 0.0)
 
+    isolated_node = False
 
-    if node_to_include is not None:
-        # Patch this node back into the learnt mask
-        H_sparse[hgraph_learn.node_to_ind[node_to_include],:] = hgraph_learn.H_unmasked[hgraph_learn.node_to_ind[node_to_include],:]
-        # print(H_sparse)
-
-
-    hgraph_sparse_incdict = incidence_matrix_to_incidence_dict_named(H_sparse.cpu(), hgraph_learn.ind_to_node, hgraph_learn.ind_to_edge)
+    if torch.all(H_sparse[hgraph_learn.node_to_ind[node_idx]] == 0.0):
+        edges = get_edges_of_nodes(hgraph, [node_idx])
+        hgraph_sparse_incdict = {edges.pop(): [node_idx]}
+        isolated_node = True
+    else:
+        hgraph_sparse_incdict = incidence_matrix_to_incidence_dict_named(H_sparse.cpu(), hgraph_learn.ind_to_node, hgraph_learn.ind_to_edge)
 
     hgraph_sparse = hnx.Hypergraph(hgraph_sparse_incdict)
+
+    # -------------------------------------------------
+    # get the component
+    
+    if component_only:
+        components = hgraph_sparse.s_components(s=1)
+        component_retain = None
+        for component in components: # find the connected component of node_idx_component
+            if any([node_idx in hgraph_sparse_incdict[edge] for edge in component]):
+                component_retain = component
+                break
+        if component_retain is not None:
+            hgraph_sparse_incdict = {edge: hgraph_sparse_incdict[edge] for edge in hgraph_sparse_incdict if edge in component}
+            hgraph_sparse = hnx.Hypergraph(hgraph_sparse_incdict)
+        else:
+            raise Exception(f"{node_idx} not in graph")
+
+    # -------------------------------------------------
+    # transfer features
+
+    transfer_features(hgraph, hgraph_sparse, cfg, isolated_node=isolated_node)
+
+    # -------------------------------------------------
+    # draw
 
     hnx.draw(hgraph_sparse, layout=nx.spring_layout)
 
@@ -573,7 +633,14 @@ def subgraph_selector(hgraph, incidence_dict, cfg):
 
 def get_human_motif(node_idx, hgraph, cfg, motif_type):
 
-    if motif_type == 'house':
+    if motif_type is None:
+        edges = get_edges_of_nodes(hgraph, [node_idx])
+        hgraph_selected = subgraph_selector(
+            hgraph, 
+            {edges.pop(): [node_idx]},
+            cfg,
+        )
+    elif motif_type == 'house':
         hgraph_selected = get_human_motif_house(node_idx, hgraph, cfg)
     elif motif_type == 'cycle':
         hgraph_selected = get_human_motif_cycle(node_idx, hgraph, cfg)
@@ -600,7 +667,7 @@ def get_human_motif_grid(node_idx, hgraph, cfg):
         edges = get_edges_of_nodes(hgraph, [node_idx])
         hgraph_selected = subgraph_selector(
             hgraph, 
-            {edge: [node_idx] for edge in edges},
+            {edges.pop(): [node_idx]},
             cfg,
         )
     
@@ -651,7 +718,7 @@ def get_human_motif_cycle(node_idx, hgraph, cfg):
         edges = get_edges_of_nodes(hgraph, [node_idx])
         hgraph_selected = subgraph_selector(
             hgraph, 
-            {edge: [node_idx] for edge in edges},
+            {edges.pop(): [node_idx]},
             cfg,
         )
 
@@ -702,7 +769,7 @@ def get_human_motif_house(node_idx, hgraph, cfg):
         edges = get_edges_of_nodes(hgraph, [node_idx])
         hgraph_selected = subgraph_selector(
             hgraph, 
-            {edge: [node_idx] for edge in edges},
+            {edges.pop(): [node_idx]},
             cfg,
         )
         return hgraph_selected

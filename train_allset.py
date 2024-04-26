@@ -201,6 +201,8 @@ def parse_method(args, data):
     https://github.com/jianhao2016/AllSet/blob/main/src/train.py
     """
 
+    args.pma_layernorm = True
+
     #     Currently we don't set hyperparameters w.r.t. different dataset
     if args.method == 'AllSetTransformer':
         if args.LearnMask:

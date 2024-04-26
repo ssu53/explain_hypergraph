@@ -16,7 +16,7 @@ lr: 0.001
 # from https://github.com/jianhao2016/AllSet/blob/main/src/train.py
 alpha_softmax: True
 display_step: 50
-PMA: True,
+PMA: True
 GPR: False
 add_self_loop: True
 exclude_self: False

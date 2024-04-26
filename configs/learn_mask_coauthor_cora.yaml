@@ -1,7 +1,7 @@
-name: learn_mask_zoo
+name: learn_mask_coauthor_cora
 
-load_fn: 'train_results/zoo/allsettransformer/run1'
-load_best: False
+load_fn: 'train_results/coauthor_cora/allsettransformer/run1'
+load_best: True
 motif: null
 
 node_samples: null
@@ -9,17 +9,17 @@ node_idxs: null
 compute_complement: True
 
 coeffs:
-  size: 0.0005
+  size: 0.05
   ent: 0.01
 
 num_expansions: 1
-lr: 0.01
+lr: 0.1
 num_epochs: 800
 loss_pred_type: kl_div
 scheduler: None
 init_strategy: const_grow
-sample_with: sigmoid
-tau: null
+sample_with: gumbel_softmax
+tau: 1.0
 save_every: 25
 save_fn: 'explanation.json'
 

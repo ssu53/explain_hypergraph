@@ -42,6 +42,8 @@ def plot_activation_by_class(activ: torch.Tensor, class_label: Union[torch.Tenso
 
     
     plt.show()
+
+    return pca_model
     
 
 
@@ -129,7 +131,7 @@ def plot_concepts(activ, labels, categorical_label: bool = True, num_clusters: i
     # activ, kmeans_model = plot_cluster_activations(activations, 'conv2', num_clusters=num_clusters)
 
 
-    plot_activation_by_class(
+    pca_model = plot_activation_by_class(
         activ, labels, categorical_label, fig_title="Activations By Class" if fig_title is None else 
                                 f"Activations By Class | {fig_title}")
     
@@ -143,4 +145,4 @@ def plot_concepts(activ, labels, categorical_label: bool = True, num_clusters: i
             activ, num_clusters, fig_title="Activations By Cluster" if fig_title is None else 
                                           f"Activations By Cluster | {fig_title}")
 
-    return kmeans_model
+    return kmeans_model, pca_model

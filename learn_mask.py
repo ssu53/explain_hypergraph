@@ -17,7 +17,7 @@ import json
 from tqdm import tqdm
 
 from train import get_single_run, eval, set_seed
-from explain import get_local_hypergraph, transfer_features, explainer_loss, get_human_motif, hgnn_explain_sparse, show_learnt_subgraph
+from explain import get_local_hypergraph, transfer_features, explainer_loss, get_human_motif, hgnn_explain_sparse, get_learnt_subgraph
 import models.allset
 
 # %%
@@ -57,7 +57,7 @@ def run_experiment(cfg, cfg_model, hgraph, model):
         cfg.node_idx, 
         hgraph_local, 
         model, 
-        init_strategy="const", 
+        init_strategy=cfg.init_strategy, 
         num_epochs=cfg.num_epochs, 
         lr=cfg.lr, 
         loss_pred_type=cfg.loss_pred_type,
@@ -93,138 +93,83 @@ def run_experiment(cfg, cfg_model, hgraph, model):
 
     
     # explanation subgraph
-    hgraph_expl = show_learnt_subgraph(hgraph_local, thresh=0.5, node_to_include=None, cfg=cfg_model)
-    transfer_features(hgraph, hgraph_expl, cfg_model)
-    # summary_expl = get_summary_nogt(cfg, hgraph, hgraph_local, hgraph_expl, model)
-
-    # # complement subgraph
-    # hgraph_local.H = torch.nan_to_num(1. - torch.tensor(H_learnt), nan=0.0) # get the complementary
-    # hgraph_local.norm = 1. - hgraph_local.norm
-    # hgraph_compl = show_learnt_subgraph(hgraph_local, thresh=0.5, node_to_include=None, cfg=cfg_model)
-    # transfer_features(hgraph, hgraph_compl, cfg_model)
-    # summary_compl = get_summary_nogt(cfg, hgraph, hgraph_local, hgraph_compl, model)
-
-    # summary = {'explanation': summary_expl, 'complement': summary_compl}
-
-    summary = print_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
-    # summary = get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
+    hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh=0.5, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
 
 
     if cfg.log_wandb:
+        assert cfg.compute_complement is None
+        summary = print_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
         wandb.finish()
+    
+    else:
+        
+        if cfg.compute_complement:
+
+            # summary for explanation subgraph
+            summary_expl = get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
+
+            # summary for complement subgraph
+            # (this corrupts hgraph_local and does not restore it)
+            hgraph_local.H = torch.nan_to_num(1. - torch.tensor(H_learnt), nan=0.0)
+            hgraph_local.norm = 1. - hgraph_local.norm
+            hgraph_compl = get_learnt_subgraph(hgraph, hgraph_local, thresh=0.5, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
+            summary_compl = get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_compl, model)
+
+            summary = {'explanation': summary_expl, 'complement': summary_compl}
+        
+        else:
+
+            # summary for explanation subgraph
+            summary = get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
         
     return summary
 
 
 @torch.no_grad()
-def get_summary_nogt(config, hgraph, hgraph_local, hgraph_expl, model):
+def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
 
-    node_idx = config.node_idx
+    node_idx = cfg.node_idx
     node_class = hgraph.y[node_idx].item()
 
     SUMMARY = {}
+    SUMMARY.update({
+        'gt_class': node_class,
+    })
 
     # -------------------------------------------------
     # original graph
     logits_target = model(hgraph)[node_idx]
     pred_target = logits_target.softmax(dim=-1)
-
-
-    # -------------------------------------------------
-    # local computational graph, fractionally-relaxed
-
-    logits_actual = model(hgraph_local)[hgraph_local.node_to_ind[node_idx]]
-    pred_actual = logits_actual.softmax(dim=-1)
-
-
-    loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-        hgraph_local.norm,
-        pred_actual,
-        pred_target,
-        pred_target.argmax().item(),
-        loss_pred_type=config.loss_pred_type,
-        coeffs=config.coeffs,
-    )
+    pred_class = pred_target.argmax().item()
 
     SUMMARY.update({
-        'loss/relaxed': loss.item(),
-        'loss_pred/relaxed': loss_pred.item(),
-        'loss_size/relaxed': loss_size.item(),
-        'loss_mask_ent/relaxed': loss_mask_ent.item(),
-        'classprob/relaxed': pred_actual.tolist(),
+        'pred_class': pred_class,
     })
-
-    # -------------------------------------------------
-    # learnt explanation subgraph, sharpened with thresh=0.5
-
-    if node_idx in hgraph_expl.node_to_ind:
-        logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
-        pred_expl = logits_expl.softmax(dim=-1)
-    else:
-        pred_expl = torch.ones_like(pred_actual) * np.nan
-    
-    assert torch.allclose(hgraph_expl.norm, torch.ones_like(hgraph_expl.norm)) # since only kept the 1s
-
-    loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-        hgraph_expl.norm * (1.0 - 1e-6), # to compute non-nan loss_mask_ent
-        pred_expl,
-        pred_target,
-        pred_target.argmax().item(),
-        loss_pred_type=config.loss_pred_type,
-        coeffs=config.coeffs,
-    )
-
-    SUMMARY.update({
-        'loss/binarised': loss.item(),
-        'loss_pred/binarised': loss_pred.item(),
-        'loss_size/binarised': loss_size.item(),
-        'loss_mask_ent/binarised': loss_mask_ent.item(),
-        'classprob/binarised': pred_expl.tolist(),
-    })
-
-    return SUMMARY
-
-
-@torch.no_grad()
-def get_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
-
-    node_idx = config.node_idx
-    node_class = hgraph.y[node_idx].item()
-
-    SUMMARY = {}
-
-    # -------------------------------------------------
-    # original graph
-    logits_target = model(hgraph)[node_idx]
-    pred_target = logits_target.softmax(dim=-1)
 
     # -------------------------------------------------
     # human-selected graph
 
-    hgraph_selected = get_human_motif(node_idx, hgraph, cfg_model, config.motif)
-    logits_selected = model(hgraph_selected)[hgraph_selected.node_to_ind[node_idx]]
-    pred_selected = logits_selected.softmax(dim=-1)
+    if cfg.motif is not None:
+        hgraph_selected = get_human_motif(node_idx, hgraph, cfg_model, cfg.motif)
+        logits_selected = model(hgraph_selected)[hgraph_selected.node_to_ind[node_idx]]
+        pred_selected = logits_selected.softmax(dim=-1)
 
-    loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-        hgraph_selected.norm * (1.0 - 1e-6), # to compute non-nan loss_mask_ent
-        pred_selected,
-        pred_target,
-        pred_target.argmax().item(),
-        loss_pred_type=config.loss_pred_type,
-        coeffs=config.coeffs,
-    )
+        loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
+            hgraph_selected.norm,
+            pred_selected,
+            pred_target,
+            pred_target.argmax().item(),
+            loss_pred_type=cfg.loss_pred_type,
+            coeffs=cfg.coeffs,
+        )
 
-    SUMMARY.update({
-        'loss/human': loss.item(),
-        'loss_pred/human': loss_pred.item(),
-        'loss_size/human': loss_size.item(),
-        'loss_mask_ent/human': loss_mask_ent.item(),
-        'classprob/human': pred_selected[node_class].item(),
-        'classprob/0/human': pred_selected[0].item(),
-        'classprob/1/human': pred_selected[1].item(),
-        'classprob/2/human': pred_selected[2].item(),
-        'classprob/3/human': pred_selected[3].item(),
-    })
+        SUMMARY.update({
+            'loss/human': loss.item(),
+            'loss_pred/human': loss_pred.item(),
+            'loss_size/human': loss_size.item(),
+            'loss_mask_ent/human': loss_mask_ent.item(),
+            'classprob/human': pred_selected.tolist(),
+        })
 
 
     # -------------------------------------------------
@@ -239,53 +184,56 @@ def get_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
         pred_actual,
         pred_target,
         pred_target.argmax().item(),
-        loss_pred_type=config.loss_pred_type,
-        coeffs=config.coeffs,
+        loss_pred_type=cfg.loss_pred_type,
+        coeffs=cfg.coeffs,
     )
 
     SUMMARY.update({
-        'loss/relaxed': loss.item(),
-        'loss_pred/relaxed': loss_pred.item(),
-        'loss_size/relaxed': loss_size.item(),
-        'loss_mask_ent/relaxed': loss_mask_ent.item(),
-        'classprob/relaxed': pred_actual[node_class].item(),
-        'classprob/0/relaxed': pred_actual[0].item(),
-        'classprob/1/relaxed': pred_actual[1].item(),
-        'classprob/2/relaxed': pred_actual[2].item(),
-        'classprob/3/relaxed': pred_actual[3].item(),
+        'loss/raw': loss.item(),
+        'loss_pred/raw': loss_pred.item(),
+        'loss_size/raw': loss_size.item(),
+        'loss_mask_ent/raw': loss_mask_ent.item(),
+        'classprob/raw': pred_actual.tolist(),
     })
 
     # -------------------------------------------------
-    # learnt explanation subgraph, sharpened with thresh=0.5
+    # learnt explanation subgraph, post-processed (sharpened with thresh=0.5 and taking the connected component)
+
+    assert node_idx in hgraph_expl.node_to_ind
 
     if node_idx in hgraph_expl.node_to_ind:
         logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
-        pred_expl = logits_expl.softmax(dim=-1)
     else:
-        pred_expl = torch.ones_like(pred_actual) * np.nan
+        logits_expl = torch.ones_like(logits_actual) * np.nan
+    pred_expl = logits_expl.softmax(dim=-1)
     
-    assert torch.allclose(hgraph_expl.norm, torch.ones_like(hgraph_expl.norm)) # since only kept the 1s
+    assert torch.allclose(hgraph_expl.norm, torch.ones_like(hgraph_expl.norm)) or torch.allclose(hgraph_expl.norm, torch.tensor([0])) 
+
 
     loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-        hgraph_expl.norm * (1.0 - 1e-6), # to compute non-nan loss_mask_ent
+        hgraph_expl.norm,
         pred_expl,
         pred_target,
         pred_target.argmax().item(),
-        loss_pred_type=config.loss_pred_type,
-        coeffs=config.coeffs,
+        loss_pred_type=cfg.loss_pred_type,
+        coeffs=cfg.coeffs,
     )
 
+    if torch.allclose(hgraph_expl.norm, torch.tensor([0])):
+        incidence_dict = {}
+    else:
+        incidence_dict = hgraph_expl.incidence_dict
+
     SUMMARY.update({
-        'loss/binarised': loss.item(),
-        'loss_pred/binarised': loss_pred.item(),
-        'loss_size/binarised': loss_size.item(),
-        'loss_mask_ent/binarised': loss_mask_ent.item(),
-        'classprob/binarised': pred_expl[node_class].item(),
-        'classprob/0/binarised': pred_expl[0].item(),
-        'classprob/1/binarised': pred_expl[1].item(),
-        'classprob/2/binarised': pred_expl[2].item(),
-        'classprob/3/binarised': pred_expl[3].item(),
+        'loss/post': loss.item(),
+        'loss_pred/post': loss_pred.item(),
+        'loss_size/post': loss_size.item(),
+        'loss_mask_ent/post': loss_mask_ent.item(),
+        'classprob/post': pred_expl.tolist(),
+        'activ_node/post': model.activ_node[hgraph_expl.node_to_ind[node_idx]].detach().cpu().tolist(),
+        'incidence_dict/post': incidence_dict,
     })
+    
 
     return SUMMARY
 
@@ -300,7 +248,7 @@ def print_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
     wandb_config = config.wandb if config.log_wandb else None
 
 
-    print(f"explaining {node_idx}")
+    print(f"explaining... Node {node_idx} | G.T. Class {node_class}")
     print()
 
     # -------------------------------------------------
@@ -319,7 +267,7 @@ def print_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
     print("class probs", torch.round(pred_selected.detach(), decimals=3))
     
     loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-        hgraph_selected.norm * (1.0 - 1e-6), # to compute non-nan loss_mask_ent
+        hgraph_selected.norm,
         pred_selected,
         pred_target,
         pred_target.argmax().item(),
@@ -339,7 +287,6 @@ def print_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
         })
     
     loss_human = loss
-    loss_pred_human = loss_pred
     loss_size_human = loss_size
     loss_mask_ent_human = loss_mask_ent
 
@@ -382,7 +329,7 @@ def print_summary(config, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
     assert torch.allclose(hgraph_expl.norm, torch.ones_like(hgraph_expl.norm)) # since only kept the 1s
 
     loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-        hgraph_expl.norm * (1.0 - 1e-6), # to compute non-nan loss_mask_ent
+        hgraph_expl.norm,
         pred_expl,
         pred_target,
         pred_target.argmax().item(),
@@ -427,25 +374,6 @@ def main(config : DictConfig) -> None:
 
     print(OmegaConf.to_yaml(config))
 
-    # config = EasyDict(
-    #     load_fn = 'train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1',
-    #     node_idx = [580],
-    #     coeffs = EasyDict(
-    #         size = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
-    #         ent = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
-    #     ),
-    #     lr=0.01,
-    #     num_epochs=400,
-    #     scheduler = None,
-    #     seed = 42,
-    #     log_wandb = True,
-    #     wandb = EasyDict(
-    #         entity = "ssu53",
-    #         project = "hgraph_mask_coeffs_class3",
-    #         experiment_name = "",
-    #     ),
-    # )
-
     node_idxs = config.node_idx
     coeffs_size = config.coeffs.size
     coeffs_ent = config.coeffs.ent
@@ -468,28 +396,39 @@ def main(config : DictConfig) -> None:
                 run_experiment(cfg, cfg_model, hgraph, model)
 
 
-# @hydra.main(version_base=None, config_path="configs", config_name="learn_mask_zoo")
-# def learn_mask_for_all_nodes(config : DictConfig) -> None:
-def learn_mask_for_all_nodes():
-        
-        config = EasyDict(
-            load_fn = 'train_results/zoo/allsettransformer/run1',
-            load_best = False,
-            coeffs = EasyDict(size=0.0005, ent= 0.01),
-            num_expansions = 1,
-            lr = 0.01,
-            num_epochs = 800,
-            loss_pred_type = 'kl_div',
-            scheduler = None,
-            seed = 42,
-            log_wandb = False,
-        )
+@hydra.main(version_base=None, config_path="configs", config_name="learn_mask_treecycle")
+def main2(config : DictConfig) -> None:
 
-        print(config)
+        cfg = EasyDict(config)
+        cfg.coeffs = EasyDict(cfg.coeffs) # hack for JSON serialisation
+
+        print(cfg)
+
+        with open(cfg.save_fn, 'w') as f: 
+            json.dump({"config": cfg, "summary": None}, f, indent=4)
+
+
+        # -------------------------------------------------
+        # load stuff
+        cfg_model, hgraph, model = load_stuff(cfg)
+
+
+        # -------------------------------------------------
+        # get nodes to be explained
+
+        if cfg.node_samples is None:
+            node_idxs = hgraph.nodes()
+        else:
+            node_idxs = np.random.choice(
+                hgraph.nodes(), size=cfg.node_samples, replace=False)
+            node_idxs = sorted(node_idxs)
+        if cfg.node_idxs is not None:
+            node_idxs = cfg.node_idxs
+        
+        # -------------------------------------------------
+        # run experiment for each of the nodes
 
         SUMMARY = {}
-
-        cfg_model, hgraph, model = load_stuff(config)
 
         pbar = tqdm(
             total=hgraph.number_of_nodes(),
@@ -497,26 +436,27 @@ def learn_mask_for_all_nodes():
             disable=False,
         )
 
-        for node_idx in hgraph.nodes():
+        for node_idx in node_idxs:
 
-            config.node_idx = node_idx
-            summary = run_experiment(config, cfg_model, hgraph, model)
+            cfg.node_idx = node_idx
+            summary = run_experiment(cfg, cfg_model, hgraph, model)
             SUMMARY[node_idx] = summary
 
             pbar.update(1)
 
-            if node_idx % 25 == 0:
-                with open('explanation.json', 'w') as f: 
-                    json.dump({"config": config, "summary": SUMMARY}, f, indent=4)
+            if node_idx % cfg.save_every == 0:
+                with open(cfg.save_fn, 'w') as f: 
+                    json.dump({"config": cfg, "summary": SUMMARY}, f, indent=4)
         
-        config.node_idx = None
+        # -------------------------------------------------
+        # save outputs
 
-        with open('explanation.json', 'w') as f: 
-            json.dump({"config": config, "summary": SUMMARY}, f, indent=4)
+        with open(cfg.save_fn, 'w') as f: 
+            json.dump({"config": cfg, "summary": SUMMARY}, f, indent=4)
 # %%
 
 if __name__ == "__main__":
-    main()
-    # learn_mask_for_all_nodes()
+    # main()
+    main2()
 
 # %%
