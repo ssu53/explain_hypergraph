@@ -6,7 +6,7 @@ from .random_hgraph import get_trivial_features, get_multiclass_normal_features
 from .load_coraca import get_coraca_hypergraph
 from .random_hgraph import generate_random_hypergraph, generate_random_uniform_hypergraph, generate_hypertrio_tree
 from .motif import unify_labels, attach_houses_to_incidence_dict, add_random_edges_to_incidence_dict, attach_motifs_to_incidence_dict, Cycle, Grid
-from .utils import incidence_matrix_to_edge_index, load_hgraph, get_split_mask
+from .utils import incidence_matrix_to_edge_index, load_hgraph, get_split_mask, EDGE_IDX2NAME
 
 
 
@@ -53,9 +53,13 @@ def populate_attributes_simple(cfg, hgraph: hnx.Hypergraph, labels: torch.Tensor
 
     if cfg.features in ["zeros", "ones", "randn"]:
         hgraph.x = get_trivial_features(labels, feature_type=cfg.features)
+    if cfg.features is None: # if features are already set
+        assert hasattr(hgraph, 'x') 
     else:
-        raise NotImplemented
+        raise NotImplementedError
     
+    assert labels.size(0) == hgraph.number_of_nodes()
+
     hgraph.y = labels
     hgraph.H = torch.tensor(hgraph.incidence_matrix().toarray())
     hgraph.edge_index = incidence_matrix_to_edge_index(hgraph.H)
@@ -103,6 +107,61 @@ def make_random_house(cfg):
     populate_attributes(cfg, hgraph, labels_strc, labels_type)
 
     return hgraph
+
+
+
+def make_community_house(cfg):
+
+
+    # union the incidence dicts of two random house hgraphs
+    assert cfg.base == "community"
+    assert cfg.features is None
+    cfg.base = "random"
+    cfg.features = "ones"
+    hgraph1 = make_random_house(cfg)
+    hgraph2 = make_random_house(cfg)
+    cfg.base = "community"
+    cfg.features = None
+
+    incdict1 = hgraph1.incidence_dict
+    node_offset = hgraph1.number_of_nodes()
+    edge_offset = hgraph2.number_of_edges()
+    incdict2 = hgraph2.incidence_dict
+    incdict2 = {'e' + str(int(edge.replace('e','')) + edge_offset): nodes for edge,nodes in incdict2.items()}
+    incdict2 = {edge: [node + node_offset for node in nodes] for edge,nodes in incdict2.items()}
+    id = {**incdict1, **incdict2}
+
+
+    # connect the two components with random degree-2 hyperedges
+
+    src = np.random.randint(0, hgraph1.number_of_nodes(), (cfg.num_inter_edges,))
+    dst = np.random.randint(hgraph1.number_of_nodes(), hgraph1.number_of_nodes() + hgraph2.number_of_nodes(), (cfg.num_inter_edges,))
+    for i in range(cfg.num_inter_edges):
+        id[EDGE_IDX2NAME(len(id))] = [src[i], dst[i]]
+
+    hgraph = hnx.Hypergraph(id)
+    print(f"{hgraph.shape=}")
+
+
+    # populate features, mimicing DGL's implementation of BA-Community
+    # features are hard-coded 10-dimensional
+
+    random_mu = [0.0] * 8
+    random_sigma = [1.0] * 8
+
+    mu_1, sigma_1 = np.array([-1.0] * 2 + random_mu), np.array([0.5] * 2 + random_sigma)
+    feat1 = np.random.multivariate_normal(mu_1, np.diag(sigma_1), hgraph1.number_of_nodes())
+
+    mu_2, sigma_2 = np.array([1.0] * 2 + random_mu), np.array([0.5] * 2 + random_sigma)
+    feat2 = np.random.multivariate_normal(mu_2, np.diag(sigma_2), hgraph2.number_of_nodes())
+
+    hgraph.x = torch.tensor(np.concatenate([feat1, feat2]), dtype=torch.float32)
+    labels = torch.cat((hgraph1.y, hgraph2.y + 4), dim=0)
+    populate_attributes_simple(cfg, hgraph, labels)
+
+
+    return hgraph
+
 
 
 def make_tree_cycle(cfg):
@@ -202,6 +261,8 @@ def make_hgraph(cfg):
         hgraph = make_random_house(cfg)
     elif cfg.base == "random_unif" and cfg.motif == "house":
         hgraph = make_random_house(cfg)
+    elif cfg.base == "community" and cfg.motif == "house":
+        hgraph = make_community_house(cfg)
     elif cfg.base == 'tree' and cfg.motif == 'cycle':
         hgraph, labels = make_tree_cycle(cfg)
         populate_attributes_simple(cfg, hgraph, labels)
