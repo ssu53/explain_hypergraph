@@ -38,6 +38,7 @@ save_dir: 'train_results/alldeepsets/unperturbed_v3/hgraph0_rerun5'
 
 seed: 0
 save_datestamp: False
+save_best: True
 
 
 defaults:  

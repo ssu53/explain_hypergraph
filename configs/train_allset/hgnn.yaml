@@ -21,6 +21,7 @@ save_dir: 'train_results/hgnn/unperturbed_v3/hgraph0'
 
 seed: 0
 save_datestamp: False
+save_best: True
 
 
 defaults:  

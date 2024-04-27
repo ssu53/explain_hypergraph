@@ -40,7 +40,7 @@ save_dir: 'train_results/allsettransformer/unperturbed_v3/hgraph_rerun5'
 
 seed: 0
 save_datestamp: False
-
+save_best: True
 
 defaults:  
   - _self_  

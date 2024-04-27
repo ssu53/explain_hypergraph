@@ -403,7 +403,7 @@ def main(cfg : DictConfig) -> None:
         num_epochs=cfg.epochs,
         contr_lambda=0.0,
         printevery=cfg.display_step,
-        save_best=True,
+        save_best=cfg.save_best,
     )
 
 
@@ -414,9 +414,10 @@ def main(cfg : DictConfig) -> None:
     print("Final Model")
     print(f"train: {eval(data, model, train_mask):.3f} | val {eval(data, model, val_mask):.3f} | test {eval(data, model, test_mask):.3f} ")
 
-    print()
-    print("Best Model")
-    print(f"train: {eval(data, best_model, train_mask):.3f} | val {eval(data, best_model, val_mask):.3f} | test {eval(data, best_model, test_mask):.3f} ")
+    if cfg.save_best:
+        print()
+        print("Best Model")
+        print(f"train: {eval(data, best_model, train_mask):.3f} | val {eval(data, best_model, val_mask):.3f} | test {eval(data, best_model, test_mask):.3f} ")
 
 
     # Save stuff

@@ -25,21 +25,21 @@ def make_random_base_graph(cfg):
 
 def decorate_and_perturb(cfg, h_base: hnx.Hypergraph):
 
-    # anchor_nodes = torch.randint(low=0, high=h_base.number_of_nodes(), size=(num_houses,)).tolist()
-    anchor_nodes = range(cfg.num_houses)
+    # anchor_nodes = torch.randint(low=0, high=h_base.number_of_nodes(), size=(num_motifs,)).tolist()
+    anchor_nodes = range(cfg.num_motifs)
     incdict, labels_strc, labels_type = attach_houses_to_incidence_dict(
         anchor_nodes,
         h_base.incidence_dict,
         h_base.number_of_nodes(),
         h_base.number_of_edges(),
-        cfg.num_house_types,
+        cfg.num_motif_types,
         cfg.with_outer_hedge,
     )
 
     num_nodes = len(set([node for lst in incdict.values() for node in lst]))
     num_edges = len(incdict)
-    assert num_nodes == h_base.number_of_nodes() + 5 * cfg.num_houses
-    assert num_edges == h_base.number_of_edges() + 4 * cfg.num_houses if cfg.with_outer_hedge else h_base.number_of_edges() + 3 * cfg.num_houses
+    assert num_nodes == h_base.number_of_nodes() + 5 * cfg.num_motifs
+    assert num_edges == h_base.number_of_edges() + 4 * cfg.num_motifs if cfg.with_outer_hedge else h_base.number_of_edges() + 3 * cfg.num_motifs
 
     incdict = add_random_edges_to_incidence_dict(cfg.num_random_edges, incdict, num_nodes, num_edges, cfg.deg_random_edges)
 
@@ -73,7 +73,7 @@ def populate_attributes(cfg, hgraph, labels_strc, labels_type):
     if cfg.features in ["zeros", "ones", "randn"]:
         hgraph.x = get_trivial_features(labels_strc, feature_type=cfg.features)
     elif cfg.features == "multiclass_normal":
-        hgraph.x = get_multiclass_normal_features(labels_type, cfg.num_house_types+1, cfg.dim_feat, cfg.w, cfg.sigma)
+        hgraph.x = get_multiclass_normal_features(labels_type, cfg.num_motif_types+1, cfg.dim_feat, cfg.w, cfg.sigma)
     else:
         raise NotImplementedError
     hgraph.y = unify_labels(labels_strc, labels_type)
@@ -85,8 +85,8 @@ def populate_attributes(cfg, hgraph, labels_strc, labels_type):
     hgraph.val_mask = val_mask
     hgraph.test_mask = test_mask
 
-    hgraph.num_house_types = 1
-    hgraph.num_classes = hgraph.num_house_types * 3 + 1
+    hgraph.num_motif_types = 1
+    hgraph.num_classes = hgraph.num_motif_types * 3 + 1
 
     return hgraph
 
@@ -198,9 +198,9 @@ def make_hgraph(cfg):
 
     if cfg.base == "coraca":
         hgraph = get_coraca_hypergraph(split=[0.5, 0.25, 0.25], split_seed=cfg.split_seed)
-    elif cfg.base == "random":
+    elif cfg.base == "random" and cfg.motif == "house":
         hgraph = make_random_house(cfg)
-    elif cfg.base == "random_unif":
+    elif cfg.base == "random_unif" and cfg.motif == "house":
         hgraph = make_random_house(cfg)
     elif cfg.base == 'tree' and cfg.motif == 'cycle':
         hgraph, labels = make_tree_cycle(cfg)

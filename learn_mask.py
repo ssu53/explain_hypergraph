@@ -396,7 +396,7 @@ def main(config : DictConfig) -> None:
                 run_experiment(cfg, cfg_model, hgraph, model)
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="learn_mask_treecycle")
+@hydra.main(version_base=None, config_path="configs", config_name="learn_mask_randhouse")
 def main2(config : DictConfig) -> None:
 
         cfg = EasyDict(config)
@@ -451,6 +451,8 @@ def main2(config : DictConfig) -> None:
         # -------------------------------------------------
         # save outputs
 
+        cfg.node_idx = None
+        
         with open(cfg.save_fn, 'w') as f: 
             json.dump({"config": cfg, "summary": SUMMARY}, f, indent=4)
 # %%

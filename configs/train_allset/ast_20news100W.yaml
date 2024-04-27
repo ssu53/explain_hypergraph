@@ -36,6 +36,7 @@ save_dir: 'train_results/20newsW100/allsettransformer/run0'
 
 seed: 0
 save_datestamp: False
+save_best: True
 
 
 defaults:  

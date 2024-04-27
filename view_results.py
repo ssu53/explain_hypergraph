@@ -45,14 +45,19 @@ from explain import plot_concepts, ActivationClassifier, plot_samples, get_local
 # alldeepsets
 # path = Path('train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1')
 
+# randhouse
+# motif_type = 'house'
+# path = Path('train_results/randhouse_v0/allsettransformer/hgraph0/run0')
+# load_best = True
+
 # treecycle
-motif_type = 'cycle'
-path = Path('train_results/treecycle_v0/allsettransformer/hgraph0/run0')
-load_best = True
+# motif_type = 'cycle'
+# path = Path('train_results/treecycle_v3/allsettransformer/hgraph0/run0')
+# load_best = True
 
 # treegrid
 # motif_type = 'grid'
-# path = Path('train_results/treegrid_v0/allsettransformer/hgraph0')
+# path = Path('train_results/treegrid_v3/allsettransformer/hgraph0/run0')
 # load_best = True
 
 # zoo
@@ -65,11 +70,23 @@ load_best = True
 # path = Path('train_results/coauthor_cora/allsettransformer/run1')
 # load_best = False
 
+
+# rashomon
+motif_type = 'house'
+path = Path('train_results/rashomon/randhouse_v0/allsettransformer/hgraph0/run7')
+# path2 = Path('train_results/randhouse_v3/allsettransformer/hgraph0/run0')
+load_best = False
+
 cfg, train_stats, hgraph, model = get_single_run(path, device=torch.device("cpu"), load_best=load_best)
+# _, _, hgraph, _ = get_single_run(path2, device=torch.device("cpu"), load_best=load_best)
 
 print(cfg)
 print(f"num nodes {hgraph.n_x} | num edges originally {hgraph.num_hyperedges} | total edges {hgraph.totedges if hasattr(hgraph, 'totedges') else None}")
 
+
+print(f"train acc {eval(hgraph, model, hgraph.train_mask):.3f} | val acc {eval(hgraph, model, hgraph.val_mask):.3f}")
+
+# %%
 
 # Fetch concepts
 
@@ -84,9 +101,24 @@ activ_node_agg = torch.tensor(hgraph.incidence_matrix().T @ activ_node)
 hyperedge_labels = get_hyperedge_labels(hgraph)
 
 
+class_label = hgraph.y
+class_label_name = class_label
+
+kmeans_model_node, _ = plot_concepts(activ_node, labels=class_label_name, num_clusters=7, cluster_by_binarise=False, fig_title="Nodes")
+
+ac = ActivationClassifier(
+    activ_node, kmeans_model_node, "decision_tree",
+    hgraph.x.cpu().reshape(-1,1), class_label, 
+    hgraph.train_mask.cpu(), hgraph.val_mask.cpu())
+print(f"Concept completeness on classes: {ac.get_classifier_accuracy():.3f}")
+
+
+print(f"train acc {eval(hgraph, model, hgraph.train_mask):.3f} | val acc {eval(hgraph, model, hgraph.val_mask):.3f}")
+
+
 # %%
 
-with open('explanation copy.json', 'r') as f:
+with open('explanation_treecycle_v0.json', 'r') as f:
     summary = json.load(f)
     summary = EasyDict(summary)
 
@@ -112,12 +144,23 @@ plt.show()
 
 # %%
 
-node_idx = 0
+node_idx = 117
 incidence_dict = df['incidence_dict/post'][node_idx]
 assert len(incidence_dict) > 0 # otherwise it is an isolated node, deal with
 hexpl = hnx.Hypergraph(incidence_dict)
 transfer_features(hgraph, hexpl, cfg, isolated_node=len(incidence_dict)==0)
-hnx.draw(hexpl)
+
+hgraph_local = get_local_hypergraph(idx=node_idx, hgraph=hgraph, num_expansions=cfg.All_num_layers, is_hedge_concept=False)
+transfer_features(hgraph, hgraph_local, cfg)
+
+fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(8,4))
+fig.suptitle(f"Node {node_idx} | G.T. Class {hgraph.y[node_idx].item()}")
+    
+hnx.draw(hgraph_local, with_node_labels=True, ax=ax[0])
+ax[0].set_title("local computational graph")
+hnx.draw(hexpl, with_node_labels=True, ax=ax[1])
+ax[1].set_title("learnt explanation graph")
+plt.show()
 
 with torch.no_grad():
     _ = model(hexpl)[hexpl.node_to_ind[node_idx]]
@@ -127,18 +170,62 @@ assert torch.allclose(torch.tensor(df['activ_node/post'][node_idx]), model.activ
 # %%
 
 
-activ_node_post = [df['activ_node/post'][i] for i in range(len(df))]
-activ_node_post = torch.tensor(activ_node_post)
+activ_node_expl = [df['activ_node/post'][i] for i in range(len(df))]
+activ_node_expl = torch.tensor(activ_node_expl)
 
 activ_node_pca = pca_model_node.transform(activ_node)
-activ_node_post_pca = pca_model_node.transform(activ_node_post)
+activ_node_expl_pca = pca_model_node.transform(activ_node_expl)
 
 
 plt.figure(figsize=(7,5))
 plt.scatter(activ_node_pca[:,0], activ_node_pca[:,1], alpha=0.3, s=10)
-plt.scatter(activ_node_post_pca[:,0], activ_node_post_pca[:,1], alpha=0.3, s=10)
+plt.scatter(activ_node_expl_pca[:,0], activ_node_expl_pca[:,1], alpha=0.3, s=10)
 plt.show()
 
+dists = torch.norm(activ_node_expl - activ_node, p=2, dim=-1)
+dists_pca = torch.norm(torch.tensor(activ_node_expl_pca) - torch.tensor(activ_node_pca), p=2, dim=-1)
+
+print(f"{dists.shape=}")
+print(f"orig: {dists.mean():.3f} +/- {dists.std():.3f}")
+print(f"PCA'd: {dists_pca.mean():.3f} +/- {dists_pca.std():.3f}")
+
+plt.figure(figsize=(3,3))
+plt.hist(dists, bins=20)
+plt.show()
+
+# print(dists[[117, 235, 236, 533]])
+# print(dists[[ 60, 256, 534]])
+# print(dists[[590, 442,  12, 443, 182, 260, 531]])
+
+# %%
+
+
+activ_node_expl = [df['activ_node/post'][i] for i in range(len(df))]
+activ_node_expl = torch.tensor(activ_node_expl)
+
+condition_mask = (hgraph.y == 1)
+condition_mask = hgraph.y
+activ_node_expl_sub = activ_node_expl[condition_mask]
+activ_node_sub = activ_node[condition_mask]
+
+activ_node_pca = pca_model_node.transform(activ_node_sub)
+activ_node_expl_pca = pca_model_node.transform(activ_node_expl_sub)
+
+
+plt.figure(figsize=(7,5))
+plt.scatter(activ_node_pca[:,0], activ_node_pca[:,1], alpha=0.3, s=10)
+plt.scatter(activ_node_expl_pca[:,0], activ_node_expl_pca[:,1], alpha=0.3, s=10)
+plt.show()
+
+
+assert activ_node_expl.shape == activ_node.shape
+assert activ_node_expl_sub.shape == activ_node_sub.shape
+
+dists = torch.norm(activ_node_expl_sub - activ_node_sub, p=2, dim=-1)
+
+plt.figure(figsize=(3,3))
+plt.hist(dists, bins=20)
+plt.show()
 
 # %%
 
@@ -177,9 +264,10 @@ def get_subclass_labels(hgraph):
 if motif_type == 'house':
     from hgraph import House, HouseGranular
     class_label = hgraph.y
-    class_label_name = [House(c.item()).name for c in class_label]
-    subclass_label_name = get_subclass_labels(hgraph)
-    subclass_label = torch.tensor([getattr(HouseGranular, c).value for c in subclass_label_name])
+    # class_label_name = [House(c.item()).name for c in class_label]
+    # subclass_label_name = get_subclass_labels(hgraph)
+    # subclass_label = torch.tensor([getattr(HouseGranular, c).value for c in subclass_label_name])
+    class_label_name = class_label
 
 if motif_type == 'cycle':
     from hgraph import Cycle
@@ -304,14 +392,14 @@ del sys.modules['explain'], sys.modules['explain.sparsemax'], sys.modules['expla
 from explain import hgnn_explain_sparse
 
 # may need to tune these dynamically depending on... the size of hgraph_local?
-coeffs = {'size': 0.005, 'ent': 0.01}
+coeffs = {'size': 0.005, 'ent': 0.01} # for house, may change size of 0.0005 to get perfect pred
 
 if isinstance(model, models.allset.models.SetGNN): 
     losses = hgnn_explain_sparse(
         node_idx, 
         hgraph_local, 
         model, 
-        init_strategy="const_grow",
+        init_strategy="const",
         num_epochs=400,
         lr=0.01, 
         loss_pred_type="kl_div",

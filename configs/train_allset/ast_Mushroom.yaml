@@ -38,6 +38,7 @@ save_dir: 'train_results/Mushroom/allsettransformer/run0'
 
 seed: 0
 save_datestamp: False
+save_best: True
 
 
 defaults:  

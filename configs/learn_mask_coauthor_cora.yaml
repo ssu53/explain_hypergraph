@@ -9,7 +9,7 @@ node_idxs: null
 compute_complement: True
 
 coeffs:
-  size: 0.05
+  size: 0.005
   ent: 0.01
 
 num_expansions: 1

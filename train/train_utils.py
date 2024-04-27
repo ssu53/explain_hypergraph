@@ -4,15 +4,18 @@ from tqdm import tqdm
 import torch
 from models.graph_models import GCN
 import copy
+import os
 
 
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    os.environ['PYTHONHASHSEED'] = str(seed)
 
 
 
@@ -224,6 +227,10 @@ def train_eval_loop(model, hgraph, train_mask, val_mask, test_mask, lr, num_epoc
             'epoch': epoch,
         }
         train_stats = update_stats(train_stats, epoch_stats)
+
+        # Rashomon set collection
+        # if train_acc >= 0.945 and train_acc <= 0.955 and val_acc >= 0.945 and val_acc <= 0.955:
+        #     return train_stats, best_model
 
         if save_best and (train_acc > best_train_acc):
             best_train_acc = train_acc
