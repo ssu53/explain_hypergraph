@@ -47,7 +47,12 @@ from explain import plot_concepts, ActivationClassifier, plot_samples, get_local
 
 # randhouse
 # motif_type = 'house'
-# path = Path('train_results/randhouse_v0/allsettransformer/hgraph0/run0')
+# path = Path('train_results/randhouse_v3/allsettransformer/hgraph0/run3')
+# load_best = True
+
+# communityhouse
+# motif_type = 'house'
+# path = Path('train_results/commhouse_v1/allsettransformer/hgraph0/run0')
 # load_best = True
 
 # treecycle
@@ -56,9 +61,9 @@ from explain import plot_concepts, ActivationClassifier, plot_samples, get_local
 # load_best = True
 
 # treegrid
-# motif_type = 'grid'
-# path = Path('train_results/treegrid_v3/allsettransformer/hgraph0/run0')
-# load_best = True
+motif_type = 'grid'
+path = Path('train_results/treegrid_v3/allsettransformer/hgraph0/run0')
+load_best = True
 
 # zoo
 # motif_type = None
@@ -68,14 +73,14 @@ from explain import plot_concepts, ActivationClassifier, plot_samples, get_local
 # coauthor-cora
 # motif_type = None
 # path = Path('train_results/coauthor_cora/allsettransformer/run1')
-# load_best = False
+# load_best = True
 
 
 # rashomon
-motif_type = 'house'
-path = Path('train_results/rashomon/randhouse_v0/allsettransformer/hgraph0/run7')
-# path2 = Path('train_results/randhouse_v3/allsettransformer/hgraph0/run0')
-load_best = False
+# motif_type = 'house'
+# path = Path('train_results/rashomon/randhouse_v0/allsettransformer/hgraph0/run7')
+# # path2 = Path('train_results/randhouse_v3/allsettransformer/hgraph0/run0')
+# load_best = False
 
 cfg, train_stats, hgraph, model = get_single_run(path, device=torch.device("cpu"), load_best=load_best)
 # _, _, hgraph, _ = get_single_run(path2, device=torch.device("cpu"), load_best=load_best)
@@ -289,7 +294,7 @@ if motif_type == None:
 
 # kmeans_model_node, _ = plot_concepts(activ_node, labels=subclass_label_name, num_clusters=7, cluster_by_binarise=False, fig_title="Nodes (Subclassed)")
 
-kmeans_model_node, _ = plot_concepts(activ_node, labels=class_label_name, num_clusters=7, cluster_by_binarise=False, fig_title="Nodes")
+kmeans_model_node, _ = plot_concepts(activ_node, labels=class_label_name, num_clusters=10, cluster_by_binarise=False, fig_title="Nodes")
 
 # kmeans_model_hedge, _ = plot_concepts(activ_hedge, labels=hyperedge_labels, num_clusters=7, cluster_by_binarise=False, fig_title="Hyperedges")
 
@@ -364,17 +369,18 @@ for node_idx in hgraph.nodes():
     transfer_features(hgraph, hgraph_local, cfg)
     with torch.no_grad():
         preds_node_only[node_idx] = model(hgraph_local).argmax(dim=-1)
-    if preds_node_only[node_idx].item() != pred_target[node_idx].item():
-        break
+
+    if node_idx > 150: break
 
 
-print(preds_node_only)
+print(node_idx)
+print(torch.argwhere((preds_node_only != pred_target) & (preds_node_only != -1)))
 
 # %%
 
 # Select node to explain
 
-node_idx = 520
+node_idx = 591
 
 set_seed(42)
 
@@ -485,23 +491,23 @@ with torch.no_grad():
 
 
     # -------------------------------------------------
-    print("human-selected graph")
+    # print("human-selected graph")
 
-    hgraph_selected = get_human_motif(node_idx, hgraph, cfg, motif_type)
-    logits_selected = model(hgraph_selected)[hgraph_selected.node_to_ind[node_idx]]
-    pred_selected = logits_selected.softmax(dim=-1)
-    print("class probs", torch.round(pred_selected, decimals=3))
+    # hgraph_selected = get_human_motif(node_idx, hgraph, cfg, motif_type)
+    # logits_selected = model(hgraph_selected)[hgraph_selected.node_to_ind[node_idx]]
+    # pred_selected = logits_selected.softmax(dim=-1)
+    # print("class probs", torch.round(pred_selected, decimals=3))
     
-    loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-        hgraph_selected.norm,
-        pred_selected,
-        pred_target,
-        pred_target.argmax().item(),
-        loss_pred_type="kl_div",
-        coeffs=coeffs,
-    )
-    print(f"{loss=:.3f} {loss_pred=:.3f} {loss_size=:.3f} {loss_mask_ent=:.3f}")
-    print()
+    # loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
+    #     hgraph_selected.norm,
+    #     pred_selected,
+    #     pred_target,
+    #     pred_target.argmax().item(),
+    #     loss_pred_type="kl_div",
+    #     coeffs=coeffs,
+    # )
+    # print(f"{loss=:.3f} {loss_pred=:.3f} {loss_size=:.3f} {loss_mask_ent=:.3f}")
+    # print()
 
 
     # -------------------------------------------------
@@ -552,8 +558,8 @@ fig.suptitle(f"Node {node_idx} | G.T. Class {hgraph.y[node_idx].item()}")
     
 hnx.draw(hgraph_local, with_node_labels=True, ax=ax[0])
 ax[0].set_title("local computational graph")
-hnx.draw(hgraph_selected, with_node_labels=True, ax=ax[1])
-ax[1].set_title("human-selected graph")
+# hnx.draw(hgraph_selected, with_node_labels=True, ax=ax[1])
+# ax[1].set_title("human-selected graph")
 hnx.draw(hgraph_expl, with_node_labels=True, ax=ax[2])
 ax[2].set_title("learnt explanation graph" + " (LOST NODE)" if torch.any(torch.isnan(pred_expl)).item() else "learnt explanation graph")
 

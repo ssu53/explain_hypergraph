@@ -406,6 +406,10 @@ def main(cfg : DictConfig) -> None:
         save_best=cfg.save_best,
     )
 
+    # if train_stats is None and best_model is None:
+    #     print("Failed to find Rashomon element.")
+    #     return
+
 
     # Print train outcomes
     # --------------------------------------

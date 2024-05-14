@@ -239,6 +239,7 @@ def train_eval_loop(model, hgraph, train_mask, val_mask, test_mask, lr, num_epoc
     if verbose:
         print(f"Final train acc: {train_acc:.3f} | val acc: {val_acc:.3f} | test acc: {test_acc:.3f} ")
 
+    # return None, None
     return train_stats, best_model
 
 
