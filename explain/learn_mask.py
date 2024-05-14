@@ -78,6 +78,17 @@ def incidence_matrix_to_incidence_dict_named(H, node_names, edge_names):
 
 
 
+def edge_index_to_incidence_dict_named(edge_index, selected_inds, node_names, edge_names):
+    incidence_dict = dict()
+    for ind_node, ind_edge in edge_index.T[selected_inds,:].tolist():
+        edge_name = edge_names[ind_edge]
+        if edge_name not in incidence_dict:
+            incidence_dict[edge_name] = []
+        incidence_dict[edge_name].append(node_names[ind_node])
+    return incidence_dict
+
+
+
 def mask_density(masked_adj, adj):
     return torch.sum(masked_adj) / torch.sum(adj)
 
@@ -551,29 +562,44 @@ def hgnn_explain(
 def get_learnt_subgraph(hgraph, hgraph_learn, thresh_num=None, thresh=None, cfg=None, node_idx=None, component_only=True):
 
     # -------------------------------------------------
+    # get scores
+
+    score = hgraph_learn.norm
+    assert torch.all(score >= 0.)
+    assert score.ndim == 1
+    assert hgraph_learn.edge_index.shape == (2, score.size(0))
+
+    # -------------------------------------------------
     # ensure threshold is populated
 
     if thresh_num is not None:
-        thresh = sorted(hgraph_learn.H.detach().cpu().numpy().flatten())[-thresh_num]
+        score_sorted = sorted(score[score > 0.].detach().cpu().numpy().flatten())
+        thresh = score_sorted[-thresh_num] if len(score_sorted) > thresh_num else score_sorted[0]
         print(f"Masking threshold override to {thresh=}.")
     
     if thresh is None: 
         print("Provide thresh_num or thresh as arguments.")
+        raise Exception
     
 
     # -------------------------------------------------
     # get the thresholded subhypergraph
 
-    H_sparse = torch.where(hgraph_learn.H >= thresh, 1.0, 0.0)
+    score_sparse = torch.where(score >= thresh, 1.0, 0.0)
+    selected_inds = torch.argwhere(score_sparse == 1.0).squeeze(dim=1).tolist()
+
+    nodes_in_explanation = hgraph_learn.edge_index[0, selected_inds].flatten().tolist()
+    nodes_in_explanation = set([hgraph_learn.ind_to_node[item] for item in nodes_in_explanation])
+
 
     isolated_node = False
 
-    if torch.all(H_sparse[hgraph_learn.node_to_ind[node_idx]] == 0.0):
+    if node_idx not in nodes_in_explanation:
         edges = get_edges_of_nodes(hgraph, [node_idx])
         hgraph_sparse_incdict = {edges.pop(): [node_idx]}
         isolated_node = True
     else:
-        hgraph_sparse_incdict = incidence_matrix_to_incidence_dict_named(H_sparse.cpu(), hgraph_learn.ind_to_node, hgraph_learn.ind_to_edge)
+        hgraph_sparse_incdict = edge_index_to_incidence_dict_named(hgraph_learn.edge_index, selected_inds, hgraph_learn.ind_to_node, hgraph_learn.ind_to_edge)
 
     hgraph_sparse = hnx.Hypergraph(hgraph_sparse_incdict)
 

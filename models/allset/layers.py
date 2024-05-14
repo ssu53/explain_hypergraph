@@ -165,7 +165,7 @@ class PMA(MessagePassing):
         )
 
         alpha = self._alpha
-        self._alpha = None
+        # self._alpha = None # save alpha to access attention weights
 
 #         Note that in the original code of GMT paper, they do not use additional W^O to combine heads.
 #         This is because O = softmax(QK^T)V and V = V_in*W^V. So W^O can be effectively taken care by W^V!!!

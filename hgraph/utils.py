@@ -10,6 +10,11 @@ def EDGE_IDX2NAME(edge_idx: int):
 
 
 
+def EDGE_NAME2IDX(edge_name: str):
+    return int(edge_name.replace('e',''))
+
+
+
 def incidence_matrix_to_edge_index(H):
 
     nodes, edges = torch.where(H > 0)

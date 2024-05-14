@@ -3,9 +3,7 @@
 import numpy as np
 import torch
 import hypernetx as hnx
-import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 from functools import partial
 from pathlib import Path
@@ -18,19 +16,49 @@ from tqdm import tqdm
 
 from train import get_single_run, eval, set_seed
 from explain import get_local_hypergraph, transfer_features, explainer_loss, get_human_motif, hgnn_explain_sparse, get_learnt_subgraph
-import models.allset
+from hgraph import EDGE_NAME2IDX
+import networkx as nx
 
 # %%
 
 
 def load_stuff(cfg):
 
-    path = Path(cfg.load_fn)
-    cfg, train_stats, hgraph, model = get_single_run(path, torch.device('cpu'), cfg.load_best)
+    path = Path(cfg.load_fn) if cfg.load_fn is not None else None
+    path_model = Path(cfg.load_fn_model) if hasattr(cfg, 'load_fn_model') else path
+    path_hgraph = Path(cfg.load_fn_hgraph) if hasattr(cfg, 'load_fn_hgraph') else path
+    cfg_model, _, _, model = get_single_run(path_model, torch.device('cpu'), cfg.load_best)
+    _, _, hgraph, _ = get_single_run(path_hgraph, torch.device('cpu'), cfg.load_best)
 
+    print(f"Loaded model from {path_model}, hgraph from {path_hgraph}")
     print(f"train acc {eval(hgraph, model, hgraph.train_mask):.3f} | val acc {eval(hgraph, model, hgraph.val_mask):.3f}")
 
-    return cfg, hgraph, model
+    return cfg_model, hgraph, model
+
+
+
+def get_inds_local(hgraph, hgraph_local):
+
+    edge_index_nodes = [hgraph_local.ind_to_node[item.item()] for item in hgraph_local.edge_index[0,:]]
+    edge_index_edges = [EDGE_NAME2IDX(hgraph_local.ind_to_edge[item.item()]) for item in hgraph_local.edge_index[1,:]]
+
+    local_edge_index_members = set([(node, edge) for node, edge in zip(edge_index_nodes, edge_index_edges)])
+
+    inds_local = [ind for ind,item in enumerate(hgraph.edge_index.T.tolist()) if tuple(item) in local_edge_index_members]
+
+    return inds_local
+
+
+
+def get_hgraph_compl(incdict, incdict_sub):
+
+    incdict_sub = {k: set(v) for k,v in incdict_sub.items()}
+    incdict_compl = {k: [vv for vv in v if vv not in incdict_sub.get(k, list())] for k,v in incdict.items()}
+    incdict_compl = {k:v for k,v in incdict_compl.items() if len(v) > 0}
+
+    hgraph_compl = hnx.Hypergraph(incdict_compl)
+
+    return hgraph_compl
 
 
 
@@ -40,6 +68,10 @@ def run_experiment(cfg, cfg_model, hgraph, model):
 
     hgraph_local = get_local_hypergraph(idx=cfg.node_idx, hgraph=hgraph, num_expansions=cfg.num_expansions, is_hedge_concept=False)
     transfer_features(hgraph, hgraph_local, cfg_model)
+
+    # plt.figure()
+    # hnx.draw(hgraph_local, layout=nx.spring_layout)
+    # plt.show()
 
 
     if cfg.log_wandb:
@@ -51,49 +83,91 @@ def run_experiment(cfg, cfg_model, hgraph, model):
             group=f"{cfg.wandb.experiment_name}-size-{cfg.coeffs.size}-ent-{cfg.coeffs.ent}-class-{node_class}",
         )
         wandb.run.name = f"{cfg.wandb.experiment_name}-size-{cfg.coeffs.size}-ent-{cfg.coeffs.ent}-class-{node_class}-node-{cfg.node_idx}"
+    
+
+    if cfg.method == "learn_mask":
+
+        hgnn_explain_sparse(
+            cfg.node_idx, 
+            hgraph_local, 
+            model, 
+            init_strategy=cfg.init_strategy, 
+            num_epochs=cfg.num_epochs, 
+            lr=cfg.lr, 
+            loss_pred_type=cfg.loss_pred_type,
+            sample_with=cfg.sample_with,
+            tau=cfg.tau,
+            hgraph_full=hgraph,
+            coeffs=cfg.coeffs,
+            # scheduler_fn=partial(torch.optim.lr_scheduler.CosineAnnealingLR, T_max=50),
+            # scheduler_fn=partial(torch.optim.lr_scheduler.CosineAnnealingWarmRestarts, T_0=100, T_mult=1),
+            # scheduler_fn=partial(torch.optim.lr_scheduler.ExponentialLR, gamma=0.99),
+            verbose=False,
+            wandb_config=cfg.wandb if cfg.log_wandb else None,
+        )
+
+        # explanation subgraph
+        hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh=0.5, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
 
 
-    hgnn_explain_sparse(
-        cfg.node_idx, 
-        hgraph_local, 
-        model, 
-        init_strategy=cfg.init_strategy, 
-        num_epochs=cfg.num_epochs, 
-        lr=cfg.lr, 
-        loss_pred_type=cfg.loss_pred_type,
-        sample_with=cfg.sample_with,
-        tau=cfg.tau,
-        hgraph_full=hgraph,
-        coeffs=cfg.coeffs,
-        # scheduler_fn=partial(torch.optim.lr_scheduler.CosineAnnealingLR, T_max=50),
-        # scheduler_fn=partial(torch.optim.lr_scheduler.CosineAnnealingWarmRestarts, T_0=100, T_mult=1),
-        # scheduler_fn=partial(torch.optim.lr_scheduler.ExponentialLR, gamma=0.99),
-        verbose=False,
-        wandb_config=cfg.wandb if cfg.log_wandb else None,
-    )
+    elif cfg.method == "self_only":
+
+        ind = torch.argwhere(hgraph_local.edge_index[0] == hgraph_local.node_to_ind[cfg.node_idx])
+        ind = ind[0].item()
+        hgraph_local.norm = torch.zeros_like(hgraph_local.norm, dtype=torch.float32)
+        hgraph_local.norm[ind] = 1.
+
+        hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh=0.5, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
+    
+
+    elif cfg.method == "random":
+
+        hgraph_local.norm = torch.rand_like(hgraph_local.norm, dtype=torch.float32)
+
+        hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh=0.5, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
 
 
-    if isinstance(model, models.allset.models.SetGNN): 
-        
-        H_learnt = torch.zeros(hgraph_local.shape)
-        H_learnt = np.where(hgraph_local.H_unmasked == 1.0, H_learnt, np.nan)
-        for i in range(hgraph_local.edge_index.size(1)):
-            ind1 = hgraph_local.edge_index[0,i]
-            ind2 = hgraph_local.edge_index[1,i]
-            assert not np.isnan(H_learnt[ind1,ind2])
-            H_learnt[ind1,ind2] = hgraph_local.norm[i]
+    elif cfg.method == "gradient":
 
-        # populate this into hgraph_local.H
-        hgraph_local.H = torch.nan_to_num(torch.tensor(H_learnt), nan=0.0)
+        for param in model.parameters():  # gradient on params not needed
+            param.requires_grad = False
 
+        hgraph_local.norm = torch.ones_like(hgraph_local.norm, dtype=torch.float32)
+        hgraph_local.norm.requires_grad = True
+        logits_target = model(hgraph_local)
+        pred_label = logits_target.argmax(dim=-1)[hgraph_local.node_to_ind[cfg.node_idx]]
+
+        gradient = torch.autograd.grad(
+            inputs=hgraph_local.norm,
+            outputs=logits_target[hgraph_local.node_to_ind[cfg.node_idx], pred_label],
+            allow_unused=True,
+            retain_graph=False,
+        )[0]
+
+        hgraph_local.norm = gradient.abs()
+
+        hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh_num=cfg.thresh_num, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
+    
+
+    elif cfg.method == "attention":
+
+        # assume is AllSetTransformer (SetGNN with attention)
+
+        inds_local = get_inds_local(hgraph, hgraph_local)
+
+        with torch.no_grad():
+            logits_target = model(hgraph)
+
+        hgraph_local.norm = torch.stack(
+            [model_layer.prop._alpha[inds_local].mean(dim=1) for model_layer in model.E2VConvs] + \
+            [model_layer.prop._alpha[inds_local].mean(dim=1) for model_layer in model.V2EConvs]
+        ).mean(dim=0).abs()
+
+        hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh_num=cfg.thresh_num, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
+    
     else:
 
-        H_learnt = hgraph_local.H.detach().cpu()
-        H_learnt = np.where(hgraph_local.H_unmasked == 1.0, H_learnt, np.nan)
-
-    
-    # explanation subgraph
-    hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh=0.5, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
+        raise NotImplementedError
 
 
     if cfg.log_wandb:
@@ -109,11 +183,9 @@ def run_experiment(cfg, cfg_model, hgraph, model):
             summary_expl = get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
 
             # summary for complement subgraph
-            # (this corrupts hgraph_local and does not restore it)
-            hgraph_local.H = torch.nan_to_num(1. - torch.tensor(H_learnt), nan=0.0)
-            hgraph_local.norm = 1. - hgraph_local.norm
-            hgraph_compl = get_learnt_subgraph(hgraph, hgraph_local, thresh=0.5, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
-            summary_compl = get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_compl, model)
+            hgraph_compl = get_hgraph_compl(hgraph_local.incidence_dict, hgraph_expl.incidence_dict)
+            transfer_features(hgraph, hgraph_compl, cfg_model)
+            summary_compl = get_summary(cfg, cfg_model, hgraph, None, hgraph_compl, model)
 
             summary = {'explanation': summary_expl, 'complement': summary_compl}
         
@@ -123,6 +195,7 @@ def run_experiment(cfg, cfg_model, hgraph, model):
             summary = get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
         
     return summary
+
 
 
 @torch.no_grad()
@@ -149,39 +222,13 @@ def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
     # -------------------------------------------------
     # human-selected graph
 
-    if cfg.motif is not None:
-        hgraph_selected = get_human_motif(node_idx, hgraph, cfg_model, cfg.motif)
-        logits_selected = model(hgraph_selected)[hgraph_selected.node_to_ind[node_idx]]
-        pred_selected = logits_selected.softmax(dim=-1)
-
-        loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-            hgraph_selected.norm,
-            pred_selected,
-            pred_target,
-            pred_target.argmax().item(),
-            loss_pred_type=cfg.loss_pred_type,
-            coeffs=cfg.coeffs,
-        )
-
-        SUMMARY.update({
-            'loss/human': loss.item(),
-            'loss_pred/human': loss_pred.item(),
-            'loss_size/human': loss_size.item(),
-            'loss_mask_ent/human': loss_mask_ent.item(),
-            'classprob/human': pred_selected.tolist(),
-        })
-
-
-    # -------------------------------------------------
-    # local computational graph, fractionally-relaxed
-
-    logits_actual = model(hgraph_local)[hgraph_local.node_to_ind[node_idx]]
-    pred_actual = logits_actual.softmax(dim=-1)
-
+    hgraph_selected = get_human_motif(node_idx, hgraph, cfg_model, cfg.motif)
+    logits_selected = model(hgraph_selected)[hgraph_selected.node_to_ind[node_idx]]
+    pred_selected = logits_selected.softmax(dim=-1)
 
     loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-        hgraph_local.norm,
-        pred_actual,
+        hgraph_selected.norm,
+        pred_selected,
         pred_target,
         pred_target.argmax().item(),
         loss_pred_type=cfg.loss_pred_type,
@@ -189,22 +236,58 @@ def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
     )
 
     SUMMARY.update({
-        'loss/raw': loss.item(),
-        'loss_pred/raw': loss_pred.item(),
-        'loss_size/raw': loss_size.item(),
-        'loss_mask_ent/raw': loss_mask_ent.item(),
-        'classprob/raw': pred_actual.tolist(),
+        'loss/human': loss.item(),
+        'loss_pred/human': loss_pred.item(),
+        'loss_size/human': loss_size.item(),
+        'loss_mask_ent/human': loss_mask_ent.item(),
+        'classprob/human': pred_selected.tolist(),
     })
 
-    # -------------------------------------------------
-    # learnt explanation subgraph, post-processed (sharpened with thresh=0.5 and taking the connected component)
 
-    assert node_idx in hgraph_expl.node_to_ind
+    # -------------------------------------------------
+    # learnt explanation subgraph, raw
+
+    if hgraph_local is not None:
+
+        if node_idx in hgraph_local.node_to_ind:
+            logits_actual = model(hgraph_local)[hgraph_local.node_to_ind[node_idx]]
+        else:
+            tmp = hgraph.norm
+            hgraph.norm = torch.zeros_like(tmp)
+            logits_actual = model(hgraph)[node_idx]
+            hgraph.norm = tmp # restore
+        pred_actual = logits_actual.softmax(dim=-1)
+
+
+        loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
+            hgraph_local.norm,
+            pred_actual,
+            pred_target,
+            pred_target.argmax().item(),
+            loss_pred_type=cfg.loss_pred_type,
+            coeffs=cfg.coeffs,
+        )
+
+        SUMMARY.update({
+            'loss/raw': loss.item(),
+            'loss_pred/raw': loss_pred.item(),
+            'loss_size/raw': loss_size.item(),
+            'loss_mask_ent/raw': loss_mask_ent.item(),
+            'classprob/raw': pred_actual.tolist(),
+        })
+
+    # -------------------------------------------------
+    # learnt explanation subgraph, post-processed
 
     if node_idx in hgraph_expl.node_to_ind:
         logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
+        activ_node = model.activ_node[hgraph_expl.node_to_ind[node_idx]].detach().cpu().tolist()
     else:
-        logits_expl = torch.ones_like(logits_actual) * np.nan
+        tmp = hgraph.norm
+        hgraph.norm = torch.zeros_like(tmp)
+        logits_expl = model(hgraph)[node_idx]
+        hgraph.norm = tmp # restore
+        activ_node = model.activ_node[node_idx].detach().cpu().tolist()
     pred_expl = logits_expl.softmax(dim=-1)
     
     assert torch.allclose(hgraph_expl.norm, torch.ones_like(hgraph_expl.norm)) or torch.allclose(hgraph_expl.norm, torch.tensor([0])) 
@@ -230,7 +313,7 @@ def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
         'loss_size/post': loss_size.item(),
         'loss_mask_ent/post': loss_mask_ent.item(),
         'classprob/post': pred_expl.tolist(),
-        'activ_node/post': model.activ_node[hgraph_expl.node_to_ind[node_idx]].detach().cpu().tolist(),
+        'activ_node/post': activ_node,
         'incidence_dict/post': incidence_dict,
     })
     
