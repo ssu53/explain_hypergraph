@@ -29,13 +29,8 @@ display_step: 50
 wd: 0.0
 
 
-path_data: 'data/unperturbed_v3/hgraph0.pickle'
-# path_data: 'data/treecycle_v0/hgraph0.pickle'
-# path_data: 'data/treegrid_v0/hgraph0.pickle'
-
-save_dir: 'train_results/allsettransformer/unperturbed_v3/hgraph_rerun5'
-# save_dir: 'train_results/treecycle_v0/allsettransformer/hgraph0/run2'
-# save_dir: 'train_results/treegrid_v0/allsettransformer/hgraph0'
+path_data: 'data/commhouse_v1/hgraph0.pickle'
+save_dir: 'train_results/commhouse_v1/allsettransformer/hgraph0/run0'
 
 
 seed: 0

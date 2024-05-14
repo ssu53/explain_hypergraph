@@ -13,15 +13,15 @@ coeffs:
   ent: 0.01
 
 num_expansions: 1
-lr: 0.1
-num_epochs: 800
+lr: 0.01
+num_epochs: 400
 loss_pred_type: kl_div
 scheduler: None
-init_strategy: const_grow
+init_strategy: const
 sample_with: gumbel_softmax
 tau: 1.0
 save_every: 25
-save_fn: 'explanation.json'
+save_fn: 'train_results/coauthor_cora/allsettransformer/run1/explanation.json'
 
 seed: 42
 

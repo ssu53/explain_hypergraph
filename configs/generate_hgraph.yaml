@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - hgraph: random_house
+  - hgraph: randhouse
 
 num_graphs: 5
 save_dir: data/_unnamed

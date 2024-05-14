@@ -1,8 +1,6 @@
-name: learn_mask_house
+name: learn_mask_treegrid
 
-load_fn: 'train_results/randhouse_v3/allsettransformer/hgraph0/run0'
-# load_fn_model: null
-# load_fn_hgraph: null
+load_fn: 'train_results/treegrid_v3/allsettransformer/hgraph0/run0'
 load_best: True
 motif: null
 
@@ -23,7 +21,7 @@ init_strategy: const
 sample_with: gumbel_softmax
 tau: 1.0
 save_every: 25
-save_fn: 'train_results/randhouse_v3/allsettransformer/hgraph0/run0/explanation.json'
+save_fn: 'train_results/treegrid_v3/allsettransformer/hgraph0/run0/explanation.json'
 
 seed: 42
 

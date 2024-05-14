@@ -1,6 +1,6 @@
-name: hcha
+name: mlp
 
-method: 'HCHA'
+method: 'MLP'
 add_self_loop: False
 runs: 1
 train_prop: 0.8
@@ -8,16 +8,15 @@ valid_prop: 0.1
 All_num_layers: 3
 dropout: 0.0
 MLP_hidden: 16
-HCHA_symdegnorm: null
-alpha_softmax: False
+normalization: ln
 cuda: 0
 lr: 0.001
-epochs: 2000
+epochs: 500
 display_step: 100
 wd: 0.0
 
 path_data: 'data/randhouse_v3/hgraph0.pickle'
-save_dir: 'train_results/randhouse_v3/hcha/hgraph0'
+save_dir: 'train_results/randhouse_v3/mlp/hgraph0/run0'
 
 seed: 0
 save_datestamp: False

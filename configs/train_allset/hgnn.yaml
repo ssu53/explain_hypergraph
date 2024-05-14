@@ -16,8 +16,8 @@ epochs: 2000
 display_step: 100
 wd: 0.0
 
-path_data: 'data/unperturbed_v3/hgraph0.pickle'
-save_dir: 'train_results/hgnn/unperturbed_v3/hgraph0'
+path_data: 'data/randhouse_v3/hgraph0.pickle'
+save_dir: 'train_results/randhouse_v3/hgnn/hgraph0'
 
 seed: 0
 save_datestamp: False
