@@ -68,6 +68,8 @@ def run_experiment(cfg, cfg_model, hgraph, model):
 
     set_seed(cfg.expl_method.seed)
 
+    assert cfg.num_expansions == model.All_num_layers
+
     hgraph_local = get_local_hypergraph(idx=cfg.node_idx, hgraph=hgraph, num_expansions=cfg.num_expansions, is_hedge_concept=False)
     transfer_features(hgraph, hgraph_local, cfg_model)
 
@@ -87,7 +89,7 @@ def run_experiment(cfg, cfg_model, hgraph, model):
         wandb.run.name = f"{cfg.wandb.experiment_name}-size-{cfg.coeffs.size}-ent-{cfg.coeffs.ent}-class-{node_class}-node-{cfg.node_idx}"
     
 
-    if cfg.expl_method.method == "learn_mask":
+    if cfg.expl_method.method == "learn":
 
         hgnn_explain_sparse(
             cfg.node_idx, 
@@ -185,7 +187,9 @@ def run_experiment(cfg, cfg_model, hgraph, model):
             summary_expl = get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model)
 
             # summary for complement subgraph
-            hgraph_compl = get_hgraph_compl(hgraph_local.incidence_dict, hgraph_expl.incidence_dict)
+            hgraph_compl = get_hgraph_compl(
+                hgraph_local.incidence_dict,
+                hgraph_expl.incidence_dict if hgraph_expl is not None else {})
             if hgraph_compl is not None: transfer_features(hgraph, hgraph_compl, cfg_model)
             summary_compl = get_summary(cfg, cfg_model, hgraph, None, hgraph_compl, model)
 
@@ -201,7 +205,7 @@ def run_experiment(cfg, cfg_model, hgraph, model):
 
 
 @torch.no_grad()
-def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
+def get_summary(cfg, cfg_model, hgraph, hgraph_pre, hgraph_post, model):
 
     node_idx = cfg.node_idx
     node_class = hgraph.y[node_idx].item()
@@ -251,10 +255,10 @@ def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
     # -------------------------------------------------
     # learnt explanation subgraph, raw
 
-    if hgraph_local is not None:
+    if hgraph_pre is not None:
 
-        if node_idx in hgraph_local.node_to_ind:
-            logits_actual = model(hgraph_local)[hgraph_local.node_to_ind[node_idx]]
+        if node_idx in hgraph_pre.node_to_ind:
+            logits_actual = model(hgraph_pre)[hgraph_pre.node_to_ind[node_idx]]
         else:
             tmp = hgraph.norm
             hgraph.norm = torch.zeros_like(tmp)
@@ -264,13 +268,20 @@ def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
 
 
         loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-            hgraph_local.norm,
+            hgraph_pre.norm,
             pred_actual,
             pred_target,
             pred_target.argmax().item(),
             loss_pred_type=cfg.loss_pred_type,
             coeffs=cfg.coeffs,
         )
+
+
+        SUMMARY.update({
+            'num_nodes/pre': hgraph_pre.number_of_nodes(),
+            'num_hedges/pre':hgraph_pre.number_of_edges(),
+            'size/pre': len(hgraph_pre.norm),
+        })
 
         if cfg.expl_method.method == "gradient" or cfg.expl_method.method == "attention":
             # the raw soft masks are not probabilties, so entropy term doesn't make sense
@@ -298,11 +309,11 @@ def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
     # -------------------------------------------------
     # learnt explanation subgraph, post-processed
 
-    if hgraph_expl is not None:
+    if hgraph_post is not None:
 
-        if node_idx in hgraph_expl.node_to_ind:
-            logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
-            activ_node = model.activ_node[hgraph_expl.node_to_ind[node_idx]].detach().cpu().tolist()
+        if node_idx in hgraph_post.node_to_ind:
+            logits_expl = model(hgraph_post)[hgraph_post.node_to_ind[node_idx]]
+            activ_node = model.activ_node[hgraph_post.node_to_ind[node_idx]].detach().cpu().tolist()
         else:
             tmp = hgraph.norm
             hgraph.norm = torch.zeros_like(tmp)
@@ -311,11 +322,11 @@ def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
             activ_node = model.activ_node[node_idx].detach().cpu().tolist()
         pred_expl = logits_expl.softmax(dim=-1)
         
-        assert torch.allclose(hgraph_expl.norm, torch.ones_like(hgraph_expl.norm)) or torch.allclose(hgraph_expl.norm, torch.tensor([0])) 
+        assert torch.allclose(hgraph_post.norm, torch.ones_like(hgraph_post.norm))
 
 
         loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-            hgraph_expl.norm,
+            hgraph_post.norm,
             pred_expl,
             pred_target,
             pred_target.argmax().item(),
@@ -323,10 +334,13 @@ def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
             coeffs=cfg.coeffs,
         )
 
-        if torch.allclose(hgraph_expl.norm, torch.tensor([0])):
-            incidence_dict = {}
-        else:
-            incidence_dict = hgraph_expl.incidence_dict
+        incidence_dict = hgraph_post.incidence_dict
+        
+        SUMMARY.update({
+            'num_nodes/post': hgraph_post.number_of_nodes(),
+            'num_hedges/post': hgraph_post.number_of_edges(),
+            'size/post': len(hgraph_post.norm),
+        })
 
         SUMMARY.update({
             'loss/post': loss.item(),
@@ -339,7 +353,7 @@ def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
         })
     
     else:
-        # hgraph_expl is an empty hypergraph
+        # hgraph_post is an empty hypergraph
 
         tmp = hgraph.norm
         hgraph.norm = torch.zeros_like(tmp)
@@ -358,6 +372,12 @@ def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
         )
 
         incidence_dict = {}
+
+        SUMMARY.update({
+            'num_nodes/post': 0,
+            'num_hedges/post': 0,
+            'size/post': 0,
+        })
 
         SUMMARY.update({
             'loss/post': loss.item(),
@@ -554,8 +574,9 @@ def main2(config : DictConfig) -> None:
         if cfg.node_samples is None:
             node_idxs = hgraph.nodes()
         else:
+            set_seed(cfg.node_samples_seed)
             node_idxs = np.random.choice(
-                hgraph.nodes(), size=cfg.node_samples, replace=False)
+                list(hgraph.nodes()), size=cfg.node_samples, replace=False)
             node_idxs = sorted(node_idxs)
         if cfg.node_idxs is not None:
             node_idxs = cfg.node_idxs

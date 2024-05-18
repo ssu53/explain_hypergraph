@@ -559,7 +559,7 @@ def hgnn_explain(
 
 
 
-def get_learnt_subgraph(hgraph, hgraph_learn, thresh_num=None, thresh=None, cfg=None, node_idx=None, component_only=True):
+def get_learnt_subgraph(hgraph, hgraph_learn, thresh_num=None, thresh=None, cfg=None, node_idx=None, include_node=False, component_only=True):
 
     # -------------------------------------------------
     # get scores
@@ -594,7 +594,7 @@ def get_learnt_subgraph(hgraph, hgraph_learn, thresh_num=None, thresh=None, cfg=
 
     isolated_node = False
 
-    if node_idx not in nodes_in_explanation:
+    if include_node and node_idx not in nodes_in_explanation:
         edges = get_edges_of_nodes(hgraph, [node_idx])
         hgraph_sparse_incdict = {edges.pop(): [node_idx]}
         isolated_node = True
@@ -617,17 +617,20 @@ def get_learnt_subgraph(hgraph, hgraph_learn, thresh_num=None, thresh=None, cfg=
             hgraph_sparse_incdict = {edge: hgraph_sparse_incdict[edge] for edge in hgraph_sparse_incdict if edge in component}
             hgraph_sparse = hnx.Hypergraph(hgraph_sparse_incdict)
         else:
-            raise Exception(f"{node_idx} not in graph")
+            assert not include_node
+            hgraph_sparse = None
 
     # -------------------------------------------------
     # transfer features
 
-    transfer_features(hgraph, hgraph_sparse, cfg, isolated_node=isolated_node)
+    if hgraph_sparse is not None:
+        transfer_features(hgraph, hgraph_sparse, cfg, isolated_node=isolated_node)
 
     # -------------------------------------------------
     # draw
 
-    hnx.draw(hgraph_sparse, layout=nx.spring_layout)
+    if hgraph_sparse is not None:
+        hnx.draw(hgraph_sparse, layout=nx.spring_layout)
 
     return hgraph_sparse
 
