@@ -1,16 +1,14 @@
 name: learn_mask_house
 
 load_fn: 'train_results/randhouse_v3/allsettransformer/hgraph0/run0'
-save_fn: 'train_results/randhouse_v3/allsettransformer/hgraph0/run0/explanation_learnt.json'
-# load_fn_model: null
-# load_fn_hgraph: null
+save_fn: 'train_results/randhouse_v3/allsettransformer/hgraph0/run0/explanation_learn.json'
 load_best: True
 motif: null
 
 node_samples: null
 node_idxs: null
 compute_complement: True
-save_every: 25
+save_every: 100
 
 num_expansions: 3
 
@@ -24,7 +22,7 @@ log_wandb: False
 
 defaults:  
   - _self_  
-  - expl_method: learn_mask
+  - expl_method: learn
   - override hydra/hydra_logging: disabled  
   - override hydra/job_logging: disabled  
 

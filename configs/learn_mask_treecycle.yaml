@@ -1,34 +1,28 @@
 name: learn_mask_treecycle
 
 load_fn: 'train_results/treecycle_v3/allsettransformer/hgraph0/run0'
+save_fn: 'train_results/treecycle_v3/allsettransformer/hgraph0/run0/explanation_learn.json'
 load_best: True
 motif: null
 
 node_samples: null
 node_idxs: null
 compute_complement: True
+save_every: 100
 
+num_expansions: 3
+
+# evaluation
+loss_pred_type: kl_div
 coeffs:
   size: 0.005
   ent: 0.01
-
-num_expansions: 3
-lr: 0.01
-num_epochs: 400
-loss_pred_type: kl_div
-scheduler: None
-init_strategy: const
-sample_with: gumbel_softmax
-tau: 1.0
-save_every: 25
-save_fn: 'train_results/treecycle_v3/allsettransformer/hgraph0/run0/explanation.json'
-
-seed: 42
 
 log_wandb: False
 
 defaults:  
   - _self_  
+  - expl_method: learn
   - override hydra/hydra_logging: disabled  
   - override hydra/job_logging: disabled  
 

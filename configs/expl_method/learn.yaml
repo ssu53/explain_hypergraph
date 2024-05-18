@@ -1,5 +1,5 @@
-name: learn_mask
-method: learn_mask
+name: learn
+method: learn
 
 lr: 0.01
 num_epochs: 400

@@ -1,16 +1,17 @@
-name: learn_mask_treegrid
+name: learn_mask_cora
 
-load_fn: 'train_results/treegrid_v3/allsettransformer/hgraph0/run0'
-save_fn: 'train_results/treegrid_v3/allsettransformer/hgraph0/run0/explanation_learn.json'
+load_fn: 'train_results/FINAL/cora'
+save_fn: 'train_results/FINAL/cora/explanation.json'
 load_best: True
 motif: null
 
-node_samples: null
+node_samples: 1000
+node_samples_seed: 0
 node_idxs: null
 compute_complement: True
 save_every: 100
 
-num_expansions: 3
+num_expansions: 1
 
 # evaluation
 loss_pred_type: kl_div

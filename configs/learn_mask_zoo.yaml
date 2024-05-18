@@ -8,7 +8,7 @@ motif: null
 node_samples: null
 node_idxs: null
 compute_complement: True
-save_every: 25
+save_every: 100
 
 num_expansions: 1
 
@@ -22,7 +22,7 @@ log_wandb: False
 
 defaults:  
   - _self_  
-  - expl_method: learn_mask
+  - expl_method: learn
   - override hydra/hydra_logging: disabled  
   - override hydra/job_logging: disabled  
 

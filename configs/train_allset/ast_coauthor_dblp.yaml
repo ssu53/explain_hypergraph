@@ -1,14 +1,14 @@
-name: allsettransformer_zoo
+name: allsettransformer_coauthor_dblp
 
 # from https://github.com/jianhao2016/AllSet/blob/main/src/run_AllSetTransformer.sh
 method: 'AllSetTransformer'
 All_num_layers: 1
 MLP_num_layers: 2
-heads: 1
+heads: 8
 Classifier_num_layers: 1
-MLP_hidden: 64
-Classifier_hidden: 64
-wd: 0.00001
+MLP_hidden: 512
+Classifier_hidden: 256
+wd: 0.0
 epochs: 500
 cuda: 0
 lr: 0.001
@@ -31,9 +31,10 @@ deepset_input_norm: False
 
 runs: 1
 
-path_data: 'zoo'
 
-save_dir: 'train_results/zoo/allsettransformer/run0'
+path_data: 'coauthor_dblp'
+
+save_dir: 'train_results/FINAL/coauthor_dblp'
 
 
 seed: 0
