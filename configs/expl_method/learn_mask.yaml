@@ -1,0 +1,11 @@
+name: learn_mask
+method: learn_mask
+
+lr: 0.01
+num_epochs: 400
+loss_pred_type: kl_div
+scheduler: None
+init_strategy: const
+sample_with: gumbel_softmax
+tau: 1.0
+seed: 42

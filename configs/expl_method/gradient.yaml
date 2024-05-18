@@ -1,0 +1,5 @@
+name: gradient
+method: gradient
+
+thresh_num: 10
+seed: 42

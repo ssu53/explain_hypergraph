@@ -56,6 +56,8 @@ def get_hgraph_compl(incdict, incdict_sub):
     incdict_compl = {k: [vv for vv in v if vv not in incdict_sub.get(k, list())] for k,v in incdict.items()}
     incdict_compl = {k:v for k,v in incdict_compl.items() if len(v) > 0}
 
+    if len(incdict_compl) == 0: return None # empty hypergraph
+
     hgraph_compl = hnx.Hypergraph(incdict_compl)
 
     return hgraph_compl
@@ -64,7 +66,7 @@ def get_hgraph_compl(incdict, incdict_sub):
 
 def run_experiment(cfg, cfg_model, hgraph, model):
 
-    set_seed(cfg.seed)
+    set_seed(cfg.expl_method.seed)
 
     hgraph_local = get_local_hypergraph(idx=cfg.node_idx, hgraph=hgraph, num_expansions=cfg.num_expansions, is_hedge_concept=False)
     transfer_features(hgraph, hgraph_local, cfg_model)
@@ -85,18 +87,18 @@ def run_experiment(cfg, cfg_model, hgraph, model):
         wandb.run.name = f"{cfg.wandb.experiment_name}-size-{cfg.coeffs.size}-ent-{cfg.coeffs.ent}-class-{node_class}-node-{cfg.node_idx}"
     
 
-    if cfg.method == "learn_mask":
+    if cfg.expl_method.method == "learn_mask":
 
         hgnn_explain_sparse(
             cfg.node_idx, 
             hgraph_local, 
             model, 
-            init_strategy=cfg.init_strategy, 
-            num_epochs=cfg.num_epochs, 
-            lr=cfg.lr, 
-            loss_pred_type=cfg.loss_pred_type,
-            sample_with=cfg.sample_with,
-            tau=cfg.tau,
+            init_strategy=cfg.expl_method.init_strategy, 
+            num_epochs=cfg.expl_method.num_epochs, 
+            lr=cfg.expl_method.lr, 
+            loss_pred_type=cfg.expl_method.loss_pred_type,
+            sample_with=cfg.expl_method.sample_with,
+            tau=cfg.expl_method.tau,
             hgraph_full=hgraph,
             coeffs=cfg.coeffs,
             # scheduler_fn=partial(torch.optim.lr_scheduler.CosineAnnealingLR, T_max=50),
@@ -110,7 +112,7 @@ def run_experiment(cfg, cfg_model, hgraph, model):
         hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh=0.5, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
 
 
-    elif cfg.method == "self_only":
+    elif cfg.expl_method.method == "self_only":
 
         ind = torch.argwhere(hgraph_local.edge_index[0] == hgraph_local.node_to_ind[cfg.node_idx])
         ind = ind[0].item()
@@ -120,14 +122,14 @@ def run_experiment(cfg, cfg_model, hgraph, model):
         hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh=0.5, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
     
 
-    elif cfg.method == "random":
+    elif cfg.expl_method.method == "random":
 
         hgraph_local.norm = torch.rand_like(hgraph_local.norm, dtype=torch.float32)
 
         hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh=0.5, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
 
 
-    elif cfg.method == "gradient":
+    elif cfg.expl_method.method == "gradient":
 
         for param in model.parameters():  # gradient on params not needed
             param.requires_grad = False
@@ -146,10 +148,10 @@ def run_experiment(cfg, cfg_model, hgraph, model):
 
         hgraph_local.norm = gradient.abs()
 
-        hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh_num=cfg.thresh_num, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
+        hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh_num=cfg.expl_method.thresh_num, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
     
 
-    elif cfg.method == "attention":
+    elif cfg.expl_method.method == "attention":
 
         # assume is AllSetTransformer (SetGNN with attention)
 
@@ -163,7 +165,7 @@ def run_experiment(cfg, cfg_model, hgraph, model):
             [model_layer.prop._alpha[inds_local].mean(dim=1) for model_layer in model.V2EConvs]
         ).mean(dim=0).abs()
 
-        hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh_num=cfg.thresh_num, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
+        hgraph_expl = get_learnt_subgraph(hgraph, hgraph_local, thresh_num=cfg.expl_method.thresh_num, cfg=cfg_model, node_idx=cfg.node_idx, component_only=True)
     
     else:
 
@@ -184,7 +186,7 @@ def run_experiment(cfg, cfg_model, hgraph, model):
 
             # summary for complement subgraph
             hgraph_compl = get_hgraph_compl(hgraph_local.incidence_dict, hgraph_expl.incidence_dict)
-            transfer_features(hgraph, hgraph_compl, cfg_model)
+            if hgraph_compl is not None: transfer_features(hgraph, hgraph_compl, cfg_model)
             summary_compl = get_summary(cfg, cfg_model, hgraph, None, hgraph_compl, model)
 
             summary = {'explanation': summary_expl, 'complement': summary_compl}
@@ -222,26 +224,28 @@ def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
     # -------------------------------------------------
     # human-selected graph
 
-    hgraph_selected = get_human_motif(node_idx, hgraph, cfg_model, cfg.motif)
-    logits_selected = model(hgraph_selected)[hgraph_selected.node_to_ind[node_idx]]
-    pred_selected = logits_selected.softmax(dim=-1)
+    if cfg.motif is not None:
 
-    loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-        hgraph_selected.norm,
-        pred_selected,
-        pred_target,
-        pred_target.argmax().item(),
-        loss_pred_type=cfg.loss_pred_type,
-        coeffs=cfg.coeffs,
-    )
+        hgraph_selected = get_human_motif(node_idx, hgraph, cfg_model, cfg.motif)
+        logits_selected = model(hgraph_selected)[hgraph_selected.node_to_ind[node_idx]]
+        pred_selected = logits_selected.softmax(dim=-1)
 
-    SUMMARY.update({
-        'loss/human': loss.item(),
-        'loss_pred/human': loss_pred.item(),
-        'loss_size/human': loss_size.item(),
-        'loss_mask_ent/human': loss_mask_ent.item(),
-        'classprob/human': pred_selected.tolist(),
-    })
+        loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
+            hgraph_selected.norm,
+            pred_selected,
+            pred_target,
+            pred_target.argmax().item(),
+            loss_pred_type=cfg.loss_pred_type,
+            coeffs=cfg.coeffs,
+        )
+
+        SUMMARY.update({
+            'loss/human': loss.item(),
+            'loss_pred/human': loss_pred.item(),
+            'loss_size/human': loss_size.item(),
+            'loss_mask_ent/human': loss_mask_ent.item(),
+            'classprob/human': pred_selected.tolist(),
+        })
 
 
     # -------------------------------------------------
@@ -268,54 +272,103 @@ def get_summary(cfg, cfg_model, hgraph, hgraph_local, hgraph_expl, model):
             coeffs=cfg.coeffs,
         )
 
-        SUMMARY.update({
-            'loss/raw': loss.item(),
-            'loss_pred/raw': loss_pred.item(),
-            'loss_size/raw': loss_size.item(),
-            'loss_mask_ent/raw': loss_mask_ent.item(),
-            'classprob/raw': pred_actual.tolist(),
-        })
+        if cfg.expl_method.method == "gradient" or cfg.expl_method.method == "attention":
+            # the raw soft masks are not probabilties, so entropy term doesn't make sense
+            SUMMARY.update({
+                'loss/raw': None,
+                'loss_pred/raw': loss_pred.item(),
+                'loss_size/raw': loss_size.item(),
+                'loss_mask_ent/raw': None,
+                'classprob/raw': pred_actual.tolist(),
+            })
+
+        else:
+            SUMMARY.update({
+                'loss/raw': loss.item(),
+                'loss_pred/raw': loss_pred.item(),
+                'loss_size/raw': loss_size.item(),
+                'loss_mask_ent/raw': loss_mask_ent.item(),
+                'classprob/raw': pred_actual.tolist(),
+            })
+    
+    else:
+        # we didn't care about any metrics on hgraph_local
+        pass
 
     # -------------------------------------------------
     # learnt explanation subgraph, post-processed
 
-    if node_idx in hgraph_expl.node_to_ind:
-        logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
-        activ_node = model.activ_node[hgraph_expl.node_to_ind[node_idx]].detach().cpu().tolist()
+    if hgraph_expl is not None:
+
+        if node_idx in hgraph_expl.node_to_ind:
+            logits_expl = model(hgraph_expl)[hgraph_expl.node_to_ind[node_idx]]
+            activ_node = model.activ_node[hgraph_expl.node_to_ind[node_idx]].detach().cpu().tolist()
+        else:
+            tmp = hgraph.norm
+            hgraph.norm = torch.zeros_like(tmp)
+            logits_expl = model(hgraph)[node_idx]
+            hgraph.norm = tmp # restore
+            activ_node = model.activ_node[node_idx].detach().cpu().tolist()
+        pred_expl = logits_expl.softmax(dim=-1)
+        
+        assert torch.allclose(hgraph_expl.norm, torch.ones_like(hgraph_expl.norm)) or torch.allclose(hgraph_expl.norm, torch.tensor([0])) 
+
+
+        loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
+            hgraph_expl.norm,
+            pred_expl,
+            pred_target,
+            pred_target.argmax().item(),
+            loss_pred_type=cfg.loss_pred_type,
+            coeffs=cfg.coeffs,
+        )
+
+        if torch.allclose(hgraph_expl.norm, torch.tensor([0])):
+            incidence_dict = {}
+        else:
+            incidence_dict = hgraph_expl.incidence_dict
+
+        SUMMARY.update({
+            'loss/post': loss.item(),
+            'loss_pred/post': loss_pred.item(),
+            'loss_size/post': loss_size.item(),
+            'loss_mask_ent/post': loss_mask_ent.item(),
+            'classprob/post': pred_expl.tolist(),
+            'activ_node/post': activ_node,
+            'incidence_dict/post': incidence_dict,
+        })
+    
     else:
+        # hgraph_expl is an empty hypergraph
+
         tmp = hgraph.norm
         hgraph.norm = torch.zeros_like(tmp)
         logits_expl = model(hgraph)[node_idx]
         hgraph.norm = tmp # restore
         activ_node = model.activ_node[node_idx].detach().cpu().tolist()
-    pred_expl = logits_expl.softmax(dim=-1)
-    
-    assert torch.allclose(hgraph_expl.norm, torch.ones_like(hgraph_expl.norm)) or torch.allclose(hgraph_expl.norm, torch.tensor([0])) 
+        pred_expl = logits_expl.softmax(dim=-1)
 
+        loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
+            torch.tensor([0.]),
+            pred_expl,
+            pred_target,
+            pred_target.argmax().item(),
+            loss_pred_type=cfg.loss_pred_type,
+            coeffs=cfg.coeffs,
+        )
 
-    loss, loss_pred, loss_size, loss_mask_ent = explainer_loss(
-        hgraph_expl.norm,
-        pred_expl,
-        pred_target,
-        pred_target.argmax().item(),
-        loss_pred_type=cfg.loss_pred_type,
-        coeffs=cfg.coeffs,
-    )
-
-    if torch.allclose(hgraph_expl.norm, torch.tensor([0])):
         incidence_dict = {}
-    else:
-        incidence_dict = hgraph_expl.incidence_dict
 
-    SUMMARY.update({
-        'loss/post': loss.item(),
-        'loss_pred/post': loss_pred.item(),
-        'loss_size/post': loss_size.item(),
-        'loss_mask_ent/post': loss_mask_ent.item(),
-        'classprob/post': pred_expl.tolist(),
-        'activ_node/post': activ_node,
-        'incidence_dict/post': incidence_dict,
-    })
+        SUMMARY.update({
+            'loss/post': loss.item(),
+            'loss_pred/post': loss_pred.item(),
+            'loss_size/post': loss_size.item(),
+            'loss_mask_ent/post': loss_mask_ent.item(),
+            'classprob/post': pred_expl.tolist(),
+            'activ_node/post': activ_node,
+            'incidence_dict/post': incidence_dict,
+        })
+
     
 
     return SUMMARY
@@ -482,9 +535,8 @@ def main(config : DictConfig) -> None:
 @hydra.main(version_base=None, config_path="configs", config_name="learn_mask_randhouse")
 def main2(config : DictConfig) -> None:
 
-        cfg = EasyDict(config)
-        cfg.coeffs = EasyDict(cfg.coeffs) # hack for JSON serialisation
-
+        cfg = EasyDict(OmegaConf.to_container(config))
+        
         print(cfg)
 
         with open(cfg.save_fn, 'w') as f: 

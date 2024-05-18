@@ -1,0 +1,4 @@
+name: only_self
+method: only_self
+
+seed: 42

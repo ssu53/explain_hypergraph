@@ -29,10 +29,8 @@ print(f"train acc {eval(hgraph, model, hgraph.train_mask):.3f} | val acc {eval(h
 
 
 cfg = EasyDict(
-    seed = 0,
-    node_idx = 606,
+    node_idx = 0,
     num_expansions = cfg_model.All_num_layers,
-    method = "learn_mask",
     log_wandb = False,
     thresh_num = 10,
     compute_complement = True,
@@ -40,11 +38,19 @@ cfg = EasyDict(
     loss_pred_type = "kl_div",
     coeffs = {'size': 0.005, 'ent': 0.01},
 
-    init_strategy = "const",
-    num_epochs = 400,
-    lr = 0.01,
-    sample_with = "gumbel_softmax",
-    tau = 1.0,
+    expl_method = EasyDict(
+        method = "attention", 
+        seed = 42,
+
+        init_strategy = "const",
+        num_epochs = 400,
+        lr = 0.01,
+        loss_pred_type = "kl_div",
+        sample_with = "gumbel_softmax",
+        tau = 1.0,
+
+        thresh_num = 10,
+    )
 )
 
 summary = run_experiment(cfg, cfg_model, hgraph, model)

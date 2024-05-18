@@ -1,0 +1,5 @@
+name: attention
+method: attention
+
+thresh_num: 10
+seed: 42

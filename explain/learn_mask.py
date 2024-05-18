@@ -575,7 +575,7 @@ def get_learnt_subgraph(hgraph, hgraph_learn, thresh_num=None, thresh=None, cfg=
     if thresh_num is not None:
         score_sorted = sorted(score[score > 0.].detach().cpu().numpy().flatten())
         thresh = score_sorted[-thresh_num] if len(score_sorted) > thresh_num else score_sorted[0]
-        print(f"Masking threshold override to {thresh=}.")
+        # print(f"Masking threshold override to {thresh=}.")
     
     if thresh is None: 
         print("Provide thresh_num or thresh as arguments.")

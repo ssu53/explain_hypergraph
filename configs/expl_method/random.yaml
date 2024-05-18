@@ -1,0 +1,5 @@
+name: random
+method: random
+
+thresh_num: 10
+seed: 42
