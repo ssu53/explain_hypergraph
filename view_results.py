@@ -18,63 +18,9 @@ from explain import plot_concepts, ActivationClassifier, plot_samples, get_local
 
 # %%
 
-
-# # HyperResidGCN
-# path = Path('train_results/hyperresidgcn/standard/ones1/hgraph0')
-# path = Path('train_results/hyperresidgcn/standard_v2/hgraph0')
-# path = Path('train_results/hyperresidgcn/standard_v3/hgraph0')
-
-# HyperResidGCN with LEN
-# path = Path('train_results/hyperresidgcn_len/standard/ones1/hgraph0')
-# path = Path('train_results/hyperresidgcn_len/standard_v2/hgraph0')
-# path = Path('train_results/hyperresidgcn_len/standard_v3/hgraph0')
-
-# HyperResidGCN
-# path = Path('train_results/hyperresidgcn_sas/standard/ones1/hgraph0')
-# path = Path('train_results/hyperresidgcn_sas/standard_v2/hgraph0')
-# path = Path('train_results/hyperresidgcn_sas/standard_v3/hgraph0')
-
-# allsettransformer
-# path = Path('train_results/allsettransformer/standard/ones1/hgraph0')
-# path = Path('train_results/allsettransformer/standard_v2/hgraph0')
-# path = Path('train_results/allsettransformer/standard_v3/hgraph0')
-# path = Path('train_results/allsettransformer/unperturbed_v3/hgraph0')
-# motif_type = 'house'
-# load_best = True
-
-# alldeepsets
-# path = Path('train_results/alldeepsets/unperturbed_v3/hgraph0_rerun1')
-
-# randhouse
-# motif_type = 'house'
-# path = Path('train_results/randhouse_v3/allsettransformer/hgraph0/run3')
-# load_best = True
-
-# communityhouse
-# motif_type = 'house'
-# path = Path('train_results/commhouse_v1/allsettransformer/hgraph0/run0')
-# load_best = True
-
-# treecycle
-# motif_type = 'cycle'
-# path = Path('train_results/treecycle_v3/allsettransformer/hgraph0/run0')
-# load_best = True
-
-# treegrid
-motif_type = 'grid'
-path = Path('train_results/treegrid_v3/allsettransformer/hgraph0/run0')
+motif_type = None
+path = Path('train_results/FINAL/treegrid')
 load_best = True
-
-# zoo
-# motif_type = None
-# path = Path('train_results/zoo/allsettransformer/run1')
-# load_best = False
-
-# coauthor-cora
-# motif_type = None
-# path = Path('train_results/coauthor_cora/allsettransformer/run1')
-# load_best = True
-
 
 # rashomon
 # motif_type = 'house'
@@ -109,7 +55,7 @@ hyperedge_labels = get_hyperedge_labels(hgraph)
 class_label = hgraph.y
 class_label_name = class_label
 
-kmeans_model_node, _ = plot_concepts(activ_node, labels=class_label_name, num_clusters=7, cluster_by_binarise=False, fig_title="Nodes")
+kmeans_model_node, _ = plot_concepts(activ_node, labels=class_label_name, num_clusters=10, cluster_by_binarise=False, fig_title="Nodes")
 
 ac = ActivationClassifier(
     activ_node, kmeans_model_node, "decision_tree",
