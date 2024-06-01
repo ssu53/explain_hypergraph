@@ -67,11 +67,11 @@ def attach_house_to_incidence_dict(node_anchor: int, incidence_dict, num_nodes: 
 
     assert num_edges == len(incidence_dict)
 
-    incidence_dict[f"e{num_edges  :04}"] = [node_anchor, num_nodes+1]                           # join to base graph
-    incidence_dict[f"e{num_edges+1:04}"] = [num_nodes+0, num_nodes+1, num_nodes+2]              # top and middle of house
-    incidence_dict[f"e{num_edges+2:04}"] = [num_nodes+1, num_nodes+2, num_nodes+3, num_nodes+4] # middle and botom of house
+    incidence_dict[EDGE_IDX2NAME(num_edges)] = [node_anchor, num_nodes+1]                           # join to base graph
+    incidence_dict[EDGE_IDX2NAME(num_edges+1)] = [num_nodes+0, num_nodes+1, num_nodes+2]              # top and middle of house
+    incidence_dict[EDGE_IDX2NAME(num_edges+2)] = [num_nodes+1, num_nodes+2, num_nodes+3, num_nodes+4] # middle and botom of house
     if with_outer_hedge:
-        incidence_dict[f"e{num_edges+3:04}"] = [num_nodes+0, num_nodes+1, num_nodes+2, num_nodes+3, num_nodes+4]
+        incidence_dict[EDGE_IDX2NAME(num_edges+3)] = [num_nodes+0, num_nodes+1, num_nodes+2, num_nodes+3, num_nodes+4]
 
     return incidence_dict
 
@@ -244,7 +244,7 @@ def add_random_edges_to_incidence_dict(num_random_edges: int, incidence_dict, nu
     ind_edge = num_edges
 
     for _ in range(num_random_edges):
-        incidence_dict[f"e{ind_edge:04}"] = choice(range(num_nodes), size=k, replace=False).tolist()
+        incidence_dict[EDGE_IDX2NAME(ind_edge)] = choice(range(num_nodes), size=k, replace=False).tolist()
         ind_edge += 1
     
     return incidence_dict

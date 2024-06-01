@@ -35,7 +35,7 @@ def plot_activation_by_class(activ: torch.Tensor, class_label: Union[torch.Tenso
             class_to_ind = dict(zip(class_to_ind, range(len(class_to_ind))))
             colour = [class_to_ind[c] for c in class_label]
             
-            pca_scat = ax.scatter(x_pca, y_pca, c=colour, alpha=0.5, cmap="tab10")
+            pca_scat = ax.scatter(x_pca, y_pca, c=colour, alpha=0.5, cmap="Dark2_r")
             ax.legend(handles=pca_scat.legend_elements()[0], labels=class_to_ind.keys())
 
         else:
@@ -44,6 +44,7 @@ def plot_activation_by_class(activ: torch.Tensor, class_label: Union[torch.Tenso
 
         
         plt.show()
+        # fig.savefig(f"{fig_title}.svg", format="svg", bbox_inches='tight')
 
     return pca_model
     
@@ -62,16 +63,17 @@ def plot_activations_by_class(activations: Dict[str, torch.Tensor], class_label:
 def plot_clusters(data: np.ndarray, labels: np.ndarray, num_clusters: int, fig_title: str, figsize=(7, 5)) -> None:
 
     fig, ax = plt.subplots(figsize=figsize)
-    fig.suptitle(fig_title)
+    ax.set_title(fig_title)
 
     for i in range(num_clusters):
-        ax.scatter(data[labels == i,0], data[labels == i,1], label=f'Cluster {i}', alpha=0.5)
+        ax.scatter(data[labels == i,0], data[labels == i,1], label=f'Concept {i}')
 
     ncol = 1
     if num_clusters > 20:
         ncol = int(num_clusters / 20) + 1
     ax.legend(ncol=ncol)
     plt.show()
+    # fig.savefig(f"{fig_title}.svg", format="svg", bbox_inches='tight')
 
 
 
@@ -129,6 +131,6 @@ def plot_concepts(activ, labels, categorical_label: bool = True, num_clusters: i
     else:
         kmeans_model = plot_activation_by_cluster(
             activ, num_clusters, verbose=verbose, fig_title="Activations By Cluster" if fig_title is None else 
-                                          f"Activations By Cluster | {fig_title}")
+                                          f"Activations By Concept | {fig_title}")
 
     return kmeans_model, pca_model

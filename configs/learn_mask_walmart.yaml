@@ -1,0 +1,34 @@
+name: learn_mask_walmart
+
+load_fn: 'train_results/FINAL/walmart-trips-100'
+save_fn: 'train_results/FINAL/walmart-trips-100/explanation.json'
+load_best: True
+motif: null
+
+node_samples: 1000
+node_samples_seed: 0
+node_idxs: null
+compute_complement: True
+save_every: 100
+
+num_expansions: 1
+
+# evaluation
+loss_pred_type: kl_div
+coeffs:
+  size: 0.005
+  ent: 0.01
+
+log_wandb: False
+
+defaults:  
+  - _self_  
+  - expl_method: learn
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled  
+
+hydra:  
+  output_subdir: null  
+  run:  
+    dir: .
+  

@@ -39,7 +39,7 @@ def data_to_hnxhypergraph(data):
         node = data.edge_index[0,i].item()
         hedge = data.edge_index[1,i].item()
         node_name = node
-        edge_name = f"e{hedge:04}"
+        edge_name = f"e{hedge:05}"
         if edge_name not in incidence_dict:
             incidence_dict[edge_name] = []
         incidence_dict[edge_name].append(node_name)

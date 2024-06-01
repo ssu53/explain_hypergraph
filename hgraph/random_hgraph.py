@@ -109,7 +109,7 @@ def generate_hypertrio_tree(depth: int = 8):
             child1 = num_nodes
             child2 = num_nodes + 1
             edge = num_edges
-            incidence_dict[f"e{edge:04}"] = [parent, child1, child2]
+            incidence_dict[EDGE_IDX2NAME(edge)] = [parent, child1, child2]
             leaf_nodes_new.append(child1)
             leaf_nodes_new.append(child2)
             num_nodes += 2

@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 
 
 def EDGE_IDX2NAME(edge_idx: int):
-    return f"e{edge_idx:04}"
+    return f"e{edge_idx:05}"
 
 
 
@@ -31,7 +31,7 @@ def incidence_matrix_to_incidence_dict(H):
     incidence_dict = {}
     for edge in range(num_edges):
         inds = torch.where(H[:,edge] == 1)[0]
-        incidence_dict[f"e{edge:04}"] = inds.tolist()
+        incidence_dict[EDGE_IDX2NAME(edge)] = inds.tolist()
     return incidence_dict
 
 
