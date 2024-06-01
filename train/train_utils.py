@@ -185,7 +185,7 @@ def train_eval_loop(model, hgraph, train_mask, val_mask, test_mask, lr, num_epoc
     train_stats = update_stats(train_stats, epoch_stats)
 
     best_train_acc = train_acc
-    best_model = None
+    best_model = copy.deepcopy(model)
 
     for epoch in range(1,num_epochs+1): # 1-index the epochs
 

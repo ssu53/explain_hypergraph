@@ -7,7 +7,7 @@ train_prop: 0.8
 valid_prop: 0.1
 All_num_layers: 3
 dropout: 0.0
-MLP_hidden: 16
+MLP_hidden: 80
 HCHA_symdegnorm: null
 alpha_softmax: False
 cuda: 0
@@ -17,7 +17,7 @@ display_step: 100
 wd: 0.0
 
 path_data: 'data/randhouse_v3/hgraph0.pickle'
-save_dir: 'train_results/randhouse_v3/hcha/hgraph0'
+save_dir: 'train_results/SYNTH_BENCHMARK/randhouse/hcha/run0'
 
 seed: 0
 save_datestamp: False

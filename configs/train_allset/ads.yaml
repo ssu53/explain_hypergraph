@@ -12,6 +12,7 @@ All_num_layers: 3
 dropout: 0.0
 aggregate: 'add'
 normalization: 'ln'
+pma_layernorm: null           # not used since self.PMA: False
 deepset_input_norm: False
 GPR: False
 MLP_hidden: 16
@@ -27,13 +28,9 @@ epochs: 500
 display_step: 50
 wd: 0.0
 
-path_data: 'data/unperturbed_v3/hgraph0.pickle'
-# path_data: 'data/treecycle_v0/hgraph0.pickle'
-# path_data: 'data/treegrid_v0/hgraph0.pickle'
 
-save_dir: 'train_results/alldeepsets/unperturbed_v3/hgraph0_rerun5'
-# save_dir: 'train_results/treecycle_v0/alldeepsets/hgraph0'
-# save_dir: 'train_results/treegrid_v0/alldeepsets/hgraph0'
+path_data: 'data/randhouse_v3/hgraph0.pickle'
+save_dir: 'train_results/SYNTH_BENCHMARK/randhouse/allsettransformer/run0'
 
 
 seed: 0
