@@ -145,6 +145,7 @@ def load_data(args):
             name=dname,
             root='data/pyg_data/hypergraph_dataset_updated/',
             p2raw=p2raw,
+            feature_noise=args.feature_noise if 'feature_noise' in args else None,
         )
 
         data = dataset_allset.data

@@ -4,6 +4,7 @@ import hypernetx as hnx
 from sklearn.cluster import KMeans
 
 from typing import List
+from hgraph import EDGE_IDX2NAME
 
 
 
@@ -17,7 +18,7 @@ def get_index_of_edge(hgraph: hnx.Hypergraph, edge: str) -> int:
 
 
 
-def get_edges_of_nodes(hgraph: hnx.Hypergraph, nodes: List[int]):
+def get_edges_of_nodes_old(hgraph: hnx.Hypergraph, nodes: List[int]):
     
     im = hgraph.incidence_matrix().toarray()
     nodes = [get_index_of_node(hgraph, n) for n in nodes]
@@ -29,12 +30,38 @@ def get_edges_of_nodes(hgraph: hnx.Hypergraph, nodes: List[int]):
 
 
 
-def get_nodes_of_edges(hgraph: hnx.Hypergraph, edges: List[str]):
+def get_nodes_of_edges_old(hgraph: hnx.Hypergraph, edges: List[str]):
     
     im = hgraph.incidence_matrix().toarray()
     edges = [get_index_of_edge(hgraph, e) for e in edges]
     im_edges = im[:, edges]
     nodes = im_edges.sum(axis=1).nonzero()[0]
+    nodes = {hgraph._state_dict['labels']['nodes'][i] for i in nodes}
+    
+    return nodes
+
+
+
+def get_edges_of_nodes(hgraph: hnx.Hypergraph, nodes: List[int]):
+
+    edge_index = hgraph.edge_index
+    nodes = [get_index_of_node(hgraph, n) for n in nodes]
+    # edges = [edge_index[1,i].item() for i in range(edge_index.size(1)) if edge_index[0,i].item() in nodes]
+    inds = np.concatenate([np.where(edge_index[0,:] == node)[0] for node in nodes])
+    edges = edge_index[1, inds].tolist()
+    edges = {EDGE_IDX2NAME(edge) for edge in edges}
+
+    return edges
+
+
+
+def get_nodes_of_edges(hgraph: hnx.Hypergraph, edges: List[str]):
+
+    edge_index = hgraph.edge_index
+    edges = [get_index_of_edge(hgraph, e) for e in edges]
+    # nodes = [edge_index[0,i].item() for i in range(edge_index.size(1)) if edge_index[1,i].item() in edges]
+    inds = np.concatenate([np.where(edge_index[1,:] == edge)[0] for edge in edges])
+    nodes = edge_index[0, inds].tolist()
     nodes = {hgraph._state_dict['labels']['nodes'][i] for i in nodes}
     
     return nodes

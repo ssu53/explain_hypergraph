@@ -572,12 +572,13 @@ def main2(config : DictConfig) -> None:
         # get nodes to be explained
 
         if cfg.node_samples is None:
-            node_idxs = hgraph.nodes()
+            node_idxs = list(hgraph.nodes())
         else:
             set_seed(cfg.node_samples_seed)
             node_idxs = np.random.choice(
                 list(hgraph.nodes()), size=cfg.node_samples, replace=False)
-            node_idxs = sorted(node_idxs)
+            node_idxs = sorted(node_idxs.tolist())
+            print(node_idxs)
         if cfg.node_idxs is not None:
             node_idxs = cfg.node_idxs
         
@@ -587,12 +588,12 @@ def main2(config : DictConfig) -> None:
         SUMMARY = {}
 
         pbar = tqdm(
-            total=hgraph.number_of_nodes(),
+            total=len(node_idxs),
             desc=f"Learning masks...",
             disable=False,
         )
 
-        for node_idx in node_idxs:
+        for i,node_idx in enumerate(node_idxs):
 
             cfg.node_idx = node_idx
             summary = run_experiment(cfg, cfg_model, hgraph, model)
@@ -600,7 +601,7 @@ def main2(config : DictConfig) -> None:
 
             pbar.update(1)
 
-            if node_idx % cfg.save_every == 0:
+            if i % cfg.save_every == 0:
                 with open(cfg.save_fn, 'w') as f: 
                     json.dump({"config": cfg, "summary": SUMMARY}, f, indent=4)
         

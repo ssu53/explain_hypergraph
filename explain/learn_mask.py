@@ -256,19 +256,21 @@ def hgnn_explain_sparse(
         else:
             raise NotImplementedError
     elif init_strategy == "normal":
+        num_nodes = hgraph.number_of_nodes() 
+        num_edges = hgraph.number_of_edges()
         if sample_with == 'sigmoid':
             mask = torch.empty_like(hgraph.norm).to(torch.float32)
-            std = torch.nn.init.calculate_gain("relu") * (2.0 / mask.shape[0]) ** 0.5 # yolo'd the gain value here
+            std = torch.nn.init.calculate_gain("relu") * (2.0 / (num_nodes + num_edges)) ** 0.5 
             with torch.no_grad():
                 mask.normal_(1.0, std)
         elif sample_with == 'gumbel_softmax':
             mask = torch.empty((hgraph.norm.size(0), 2)).to(torch.float32)
-            std = torch.nn.init.calculate_gain("relu") * (2.0 / mask.shape[0]) ** 0.5 # yolo'd the gain value here
+            std = torch.nn.init.calculate_gain("relu") * (2.0 / (num_nodes + num_edges)) ** 0.5 
             with torch.no_grad():
                 mask.normal_(1.0, std)
         elif sample_with == 'sparsemax':
             mask = torch.empty((hgraph.norm.size(0), 2)).to(torch.float32)
-            std = torch.nn.init.calculate_gain("relu") * (2.0 / mask.shape[0]) ** 0.5 # yolo'd the gain value here
+            std = torch.nn.init.calculate_gain("relu") * (2.0 / (num_nodes + num_edges)) ** 0.5 
             with torch.no_grad():
                 mask.normal_(1.0, std)
             sparsemax = Sparsemax(dim=1)
@@ -601,6 +603,10 @@ def get_learnt_subgraph(hgraph, hgraph_learn, thresh_num=None, thresh=None, cfg=
     else:
         hgraph_sparse_incdict = edge_index_to_incidence_dict_named(hgraph_learn.edge_index, selected_inds, hgraph_learn.ind_to_node, hgraph_learn.ind_to_edge)
 
+    if len(hgraph_sparse_incdict) == 0:
+        hgraph_sparse = None
+        return hgraph_sparse
+    
     hgraph_sparse = hnx.Hypergraph(hgraph_sparse_incdict)
 
     # -------------------------------------------------
@@ -629,8 +635,8 @@ def get_learnt_subgraph(hgraph, hgraph_learn, thresh_num=None, thresh=None, cfg=
     # -------------------------------------------------
     # draw
 
-    if hgraph_sparse is not None:
-        hnx.draw(hgraph_sparse, layout=nx.spring_layout)
+    # if hgraph_sparse is not None:
+        # hnx.draw(hgraph_sparse, layout=nx.spring_layout)
 
     return hgraph_sparse
 
